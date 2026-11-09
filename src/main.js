@@ -1,0 +1,278 @@
+// Arranque: une render, fisica, partida, jugador e interfaz.
+
+import * as THREE from 'three';
+import { DT, BED_Y, R } from './physics/constants.js';
+import { buildTable, TABLE_OUT_X, TABLE_OUT_Z } from './render/tableMesh.js';
+import { buildBalls } from './render/ballsMesh.js';
+import { createGame } from './game/match.js';
+import { remaining } from './rules/eightball.js';
+import { createWalker } from './player/walk.js';
+import { createAimView } from './player/aimView.js';
+import { createDesktopInput } from './player/input.js';
+import { createHud } from './ui/hud.js';
+
+const canvas = document.getElementById('view');
+const uiRoot = document.getElementById('ui');
+
+function fatal(msg) {
+  const f = document.getElementById('fatal');
+  f.textContent = msg;
+  f.hidden = false;
+}
+
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+} catch (e) {
+  fatal('Tu dispositivo no puede mostrar gráficos 3D');
+  throw e;
+}
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#0b0c0e');
+const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.03, 80);
+
+// ---------- Escena provisional (se sustituye por la sala) ----------
+scene.add(new THREE.AmbientLight('#ffffff', 0.5));
+const spot = new THREE.SpotLight('#fff4e0', 60, 0, 0.8, 0.5);
+spot.position.set(0, 2.7, 0);
+spot.castShadow = true;
+spot.shadow.mapSize.set(2048, 2048);
+scene.add(spot, spot.target);
+const floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), new THREE.MeshStandardMaterial({ color: '#55565a', roughness: 1 }));
+floorMesh.rotation.x = -Math.PI / 2;
+floorMesh.receiveShadow = true;
+scene.add(floorMesh);
+const tableCollider = { minX: -TABLE_OUT_X, maxX: TABLE_OUT_X, minZ: -TABLE_OUT_Z, maxZ: TABLE_OUT_Z };
+const colliders = [tableCollider];
+const floors = [];
+
+scene.add(buildTable());
+const balls = buildBalls();
+scene.add(balls.group);
+
+// ---------- Partida y jugador ----------
+const isTouch = matchMedia('(pointer: coarse)').matches;
+const game = createGame(['Jugador 1', 'Jugador 2']);
+const walker = createWalker(colliders, floors, { x: TABLE_OUT_X, z: TABLE_OUT_Z });
+const aimView = createAimView(scene, game);
+
+let mode = 'walk'; // 'walk' | 'aim'
+let paused = false;
+const blend = { t: 1, pos: new THREE.Vector3(), quat: new THREE.Quaternion() };
+const BLEND_TIME = 0.6;
+
+function startBlend() {
+  blend.pos.copy(camera.position);
+  blend.quat.copy(camera.quaternion);
+  blend.t = 0;
+}
+
+const canAct = () => (game.state === 'aiming' || game.state === 'placing') && walker.distanceToTable() < 1.5;
+
+function enterAim() {
+  if (mode !== 'walk' || paused || !canAct()) return;
+  aimView.enter(walker.x, walker.z);
+  mode = 'aim';
+  startBlend();
+  input.unlock();
+}
+
+function leaveAim() {
+  if (mode !== 'aim') return;
+  aimView.exit();
+  hud.setPower(0);
+  walker.adopt(camera);
+  mode = 'walk';
+  if (!isTouch) input.lock();
+}
+
+let lastState = game.state;
+game.onChange(() => {
+  if (game.state === 'rolling' && mode === 'aim') leaveAim();
+  else if (mode === 'aim' && game.state !== lastState) startBlend();
+  if (lastState === 'rolling' && game.state !== 'rolling' && game.match.lastResult) hud.toast(game.match.lastResult.message);
+  lastState = game.state;
+});
+
+// ---------- Entrada ----------
+let spaceCharge = false;
+const input = createDesktopInput(canvas, {
+  onLook(dYaw, dPitch) {
+    if (mode === 'walk' && !paused) walker.look(dYaw, dPitch);
+  },
+  onKeyDown(code) {
+    if (paused) return;
+    if (mode === 'walk') {
+      if (code === 'KeyE' || code === 'Enter') enterAim();
+    } else if (game.state === 'placing') {
+      if (code === 'Enter' || code === 'KeyE') confirmPlace();
+      if (code === 'Escape' || code === 'KeyQ') leaveAim();
+    } else {
+      if (code === 'Space') spaceCharge = true;
+      if (code === 'Escape' || code === 'KeyQ') leaveAim();
+    }
+  },
+  onKeyUp(code) {
+    if (code === 'Space' && spaceCharge) {
+      spaceCharge = false;
+      if (mode === 'aim') releaseShot();
+    }
+  },
+  onWheel(sign) {
+    if (mode === 'aim' && game.state === 'aiming') aimView.rotate(-sign * 0.002);
+  },
+});
+
+function confirmPlace() {
+  const cue = game.table.balls[0];
+  game.placeCue(cue.x, cue.z);
+}
+
+function releaseShot() {
+  aimView.release();
+  hud.setPower(0);
+}
+
+const hud = createHud(uiRoot, {
+  onAct: enterAim,
+  onStand: leaveAim,
+  onReplace: () => game.startPlacing(),
+  onConfirm: confirmPlace,
+  onPause: () => {},
+  onFine: (dir) => aimView.rotate(dir * 0.002),
+  onPower: (p) => { aimView.setPull(p); hud.setPower(p); },
+  onPowerRelease: releaseShot,
+  onPowerCancel: () => { aimView.setPull(0); hud.setPower(0); },
+});
+
+// Gestos sobre la imagen en modo apuntar: girar, inclinar y arrastrar la blanca.
+const raycaster = new THREE.Raycaster();
+const bedPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -(BED_Y + R));
+const hitPoint = new THREE.Vector3();
+const ndc = new THREE.Vector2();
+let dragId = null;
+let dragX = 0;
+let dragY = 0;
+
+function dragCueTo(e) {
+  ndc.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  raycaster.setFromCamera(ndc, camera);
+  if (raycaster.ray.intersectPlane(bedPlane, hitPoint)) aimView.dragCue(hitPoint.x, hitPoint.z);
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  if (paused) return;
+  if (mode === 'walk') {
+    if (!isTouch && e.pointerType === 'mouse') input.lock();
+    return;
+  }
+  if (dragId !== null) return;
+  dragId = e.pointerId;
+  dragX = e.clientX;
+  dragY = e.clientY;
+  canvas.setPointerCapture(e.pointerId);
+  if (game.state === 'placing' && blend.t >= 1) dragCueTo(e);
+});
+canvas.addEventListener('pointermove', (e) => {
+  if (e.pointerId !== dragId || mode !== 'aim') return;
+  if (game.state === 'placing') {
+    if (blend.t >= 1) dragCueTo(e);
+  } else {
+    aimView.rotate(-(e.clientX - dragX) * 0.0035);
+    aimView.tilt((e.clientY - dragY) * 0.004);
+  }
+  dragX = e.clientX;
+  dragY = e.clientY;
+});
+const endDrag = (e) => { if (e.pointerId === dragId) dragId = null; };
+canvas.addEventListener('pointerup', endDrag);
+canvas.addEventListener('pointercancel', endDrag);
+
+// ---------- Bucle ----------
+function updateHud() {
+  const m = game.match;
+  let hint = '';
+  if (mode === 'walk' && !isTouch && !input.locked) hint = 'Haz clic para mirar alrededor';
+  else if (mode === 'aim' && game.state === 'aiming' && !isTouch) hint = 'Arrastra para apuntar · Espacio o la barra para dar fuerza';
+  hud.update({
+    mode,
+    touch: isTouch,
+    state: game.state,
+    turn: m.turn,
+    over: m.phase === 'over',
+    players: m.players.map((p, i) => ({ name: p.name, group: p.group, left: remaining(m, i) })),
+    canAct: canAct(),
+    actLabel: game.state === 'placing' ? 'Colocar blanca' : 'Tirar',
+    canPlace: game.canPlace(),
+    kitchen: m.ballInHand === 'kitchen',
+    hint,
+  });
+}
+
+let acc = 0;
+let lastT = performance.now();
+
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min((now - lastT) / 1000, 0.1);
+  lastT = now;
+  if (!paused) {
+    acc += dt;
+    let n = 0;
+    while (acc >= DT && n < 8) {
+      game.tick();
+      acc -= DT;
+      n++;
+    }
+    if (acc >= DT) acc = 0;
+
+    if (mode === 'walk') {
+      const mv = input.move();
+      walker.update(dt, mv.x, mv.z, mv.run);
+    } else {
+      if (game.state === 'aiming') {
+        const slow = input.isDown('ShiftLeft', 'ShiftRight') ? 0.15 : 1;
+        const turn = (input.isDown('KeyA', 'ArrowLeft') ? 1 : 0) - (input.isDown('KeyD', 'ArrowRight') ? 1 : 0);
+        if (turn) aimView.rotate(turn * 0.5 * slow * dt);
+        const tilt = (input.isDown('KeyW', 'ArrowUp') ? 1 : 0) - (input.isDown('KeyS', 'ArrowDown') ? 1 : 0);
+        if (tilt) aimView.tilt(tilt * 0.8 * dt);
+        if (spaceCharge) {
+          aimView.setPull(aimView.pull + dt * 0.7);
+          hud.setPower(aimView.pull);
+        }
+      }
+      aimView.update(dt);
+    }
+  }
+
+  const pose = mode === 'walk' ? walker.pose : aimView.pose;
+  if (blend.t < 1) {
+    blend.t = Math.min(1, blend.t + dt / BLEND_TIME);
+    const e = blend.t * blend.t * (3 - 2 * blend.t);
+    camera.position.lerpVectors(blend.pos, pose.position, e);
+    camera.quaternion.slerpQuaternions(blend.quat, pose.quaternion, e);
+  } else {
+    camera.position.copy(pose.position);
+    camera.quaternion.copy(pose.quaternion);
+  }
+
+  balls.sync(game.table);
+  updateHud();
+  renderer.render(scene, camera);
+}
+requestAnimationFrame(frame);
+
+addEventListener('resize', () => {
+  renderer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+});
+
+// Acceso para depurar desde la consola.
+window.__billar = { game, walker, aimView, camera, scene, renderer, get mode() { return mode; }, enterAim, leaveAim };
