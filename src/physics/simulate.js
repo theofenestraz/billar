@@ -93,7 +93,7 @@ const OUT_MARGIN = 0.085; // mas alla de esto la bola se da por embocada
 const D2 = 4 * R * R;
 
 // Tiempo hasta que dos bolas se tocan, o -1 si no ocurre dentro de tMax.
-function toiBallBall(a, b, tMax) {
+export function toiBallBall(a, b, tMax) {
   const px = b.x - a.x;
   const pz = b.z - a.z;
   const vx = b.vx - a.vx;
@@ -110,7 +110,7 @@ function toiBallBall(a, b, tMax) {
 }
 
 // Tiempo hasta que una bola toca un punto fijo, o -1.
-function toiBallPoint(b, ex, ez, tMax) {
+export function toiBallPoint(b, ex, ez, tMax) {
   const px = b.x - ex;
   const pz = b.z - ez;
   const bq = px * b.vx + pz * b.vz;
@@ -125,7 +125,7 @@ function toiBallPoint(b, ex, ez, tMax) {
 }
 
 // Tiempo hasta que una bola toca el interior de un segmento de banda, o -1.
-function toiBallSegment(b, c, tMax) {
+export function toiBallSegment(b, c, tMax) {
   const d = (b.x - c.x1) * c.nx + (b.z - c.z1) * c.nz;
   const vn = b.vx * c.nx + b.vz * c.nz;
   let t;
