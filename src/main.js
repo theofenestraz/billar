@@ -10,6 +10,8 @@ import { createWalker } from './player/walk.js';
 import { createAimView } from './player/aimView.js';
 import { createDesktopInput } from './player/input.js';
 import { createHud } from './ui/hud.js';
+import { buildRoom } from './render/room.js';
+import { setupLighting } from './render/lighting.js';
 
 const canvas = document.getElementById('view');
 const uiRoot = document.getElementById('ui');
@@ -27,34 +29,24 @@ try {
   fatal('Tu dispositivo no puede mostrar gráficos 3D');
   throw e;
 }
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.setSize(innerWidth, innerHeight);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color('#0b0c0e');
+scene.background = new THREE.Color('#050506');
 const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.03, 80);
 
-// ---------- Escena provisional (se sustituye por la sala) ----------
-scene.add(new THREE.AmbientLight('#ffffff', 0.5));
-const spot = new THREE.SpotLight('#fff4e0', 60, 0, 0.8, 0.5);
-spot.position.set(0, 2.7, 0);
-spot.castShadow = true;
-spot.shadow.mapSize.set(2048, 2048);
-scene.add(spot, spot.target);
-const floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), new THREE.MeshStandardMaterial({ color: '#55565a', roughness: 1 }));
-floorMesh.rotation.x = -Math.PI / 2;
-floorMesh.receiveShadow = true;
-scene.add(floorMesh);
+// ---------- Sala, mesa y luces ----------
+const room = buildRoom();
+scene.add(room.group);
 const tableCollider = { minX: -TABLE_OUT_X, maxX: TABLE_OUT_X, minZ: -TABLE_OUT_Z, maxZ: TABLE_OUT_Z };
-const colliders = [tableCollider];
-const floors = [];
+const colliders = [tableCollider, ...room.colliders];
+const floors = room.floors;
+const lighting = setupLighting(renderer, scene, camera);
+lighting.resize(innerWidth, innerHeight);
 
 scene.add(buildTable());
 const balls = buildBalls();
 scene.add(balls.group);
+lighting.captureEnvironment([balls.group]);
 
 // ---------- Partida y jugador ----------
 const isTouch = matchMedia('(pointer: coarse)').matches;
@@ -264,15 +256,15 @@ function frame(now) {
 
   balls.sync(game.table);
   updateHud();
-  renderer.render(scene, camera);
+  lighting.render();
 }
 requestAnimationFrame(frame);
 
 addEventListener('resize', () => {
-  renderer.setSize(innerWidth, innerHeight);
+  lighting.resize(innerWidth, innerHeight);
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
 });
 
 // Acceso para depurar desde la consola.
-window.__billar = { game, walker, aimView, camera, scene, renderer, get mode() { return mode; }, enterAim, leaveAim };
+window.__billar = { room, lighting, game, walker, aimView, camera, scene, renderer, get mode() { return mode; }, enterAim, leaveAim };

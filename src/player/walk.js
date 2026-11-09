@@ -10,11 +10,11 @@ const STEP_UP = 0.45; // desnivel maximo que se puede subir de un paso
 const PITCH_LIMIT = 1.45;
 
 export function createWalker(colliders, floors, tableHalf) {
-  const pos = { x: -2.6, z: 3.4 };
+  const pos = { x: -0.5, z: 4.9 };
   let floorY = 0;
   let eyeY = EYE;
-  let yaw = -0.6;
-  let pitch = -0.12;
+  let yaw = 0.1;
+  let pitch = -0.08;
   // Desfase visual tras levantarse de un tiro: la camara se queda donde estaba
   // y vuelve a la altura de los ojos al empezar a caminar.
   const offset = new THREE.Vector3();
