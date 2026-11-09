@@ -82,3 +82,306 @@ export function isAtRest(state) {
   }
   return true;
 }
+
+// ---------- Colisiones ----------
+
+import { E_BALL, E_CUSHION, HALF_W, HALF_L, MAX_STEPS } from './constants.js';
+import { POCKETS, CUSHIONS } from './table.js';
+
+const MAX_HITS_PER_STEP = 64;
+const OUT_MARGIN = 0.085; // mas alla de esto la bola se da por embocada
+const D2 = 4 * R * R;
+
+// Tiempo hasta que dos bolas se tocan, o -1 si no ocurre dentro de tMax.
+function toiBallBall(a, b, tMax) {
+  const px = b.x - a.x;
+  const pz = b.z - a.z;
+  const vx = b.vx - a.vx;
+  const vz = b.vz - a.vz;
+  const bq = px * vx + pz * vz;
+  if (bq >= 0) return -1; // no se acercan
+  const c = px * px + pz * pz - D2;
+  if (c <= 0) return 0; // ya en contacto y acercandose
+  const aq = vx * vx + vz * vz;
+  const disc = bq * bq - aq * c;
+  if (disc < 0) return -1;
+  const t = (-bq - Math.sqrt(disc)) / aq;
+  return t <= tMax ? t : -1;
+}
+
+// Tiempo hasta que una bola toca un punto fijo, o -1.
+function toiBallPoint(b, ex, ez, tMax) {
+  const px = b.x - ex;
+  const pz = b.z - ez;
+  const bq = px * b.vx + pz * b.vz;
+  if (bq >= 0) return -1;
+  const c = px * px + pz * pz - R * R;
+  if (c <= 0) return 0;
+  const aq = b.vx * b.vx + b.vz * b.vz;
+  const disc = bq * bq - aq * c;
+  if (disc < 0) return -1;
+  const t = (-bq - Math.sqrt(disc)) / aq;
+  return t <= tMax ? t : -1;
+}
+
+// Tiempo hasta que una bola toca el interior de un segmento de banda, o -1.
+function toiBallSegment(b, c, tMax) {
+  const d = (b.x - c.x1) * c.nx + (b.z - c.z1) * c.nz;
+  const vn = b.vx * c.nx + b.vz * c.nz;
+  let t;
+  if (d >= 0) {
+    if (vn >= 0) return -1;
+    t = d <= R ? 0 : (d - R) / -vn;
+  } else {
+    if (vn <= 0) return -1;
+    t = -d <= R ? 0 : (-d - R) / vn;
+  }
+  if (t > tMax) return -1;
+  // El punto de contacto debe caer dentro del segmento.
+  const s = (b.x + b.vx * t - c.x1) * c.tx + (b.z + b.vz * t - c.z1) * c.tz;
+  if (s < 0 || s > c.len) return -1;
+  return t;
+}
+
+function bounceOff(b, nx, nz, events) {
+  const vn = b.vx * nx + b.vz * nz;
+  if (vn >= 0) return;
+  const k = (1 + E_CUSHION) * vn;
+  b.vx -= k * nx;
+  b.vz -= k * nz;
+  events.push({ type: 'cushion', ball: b.id, speed: -vn });
+}
+
+function pocketBall(b, pocketId, events) {
+  b.pocketed = true;
+  stopBall(b);
+  b.wy = 0;
+  events.push({ type: 'pocket', ball: b.id, pocket: pocketId });
+}
+
+function checkPockets(balls, events) {
+  for (let i = 0; i < balls.length; i++) {
+    const b = balls[i];
+    if (b.pocketed || (b.vx === 0 && b.vz === 0)) continue;
+    let nearest = 0;
+    let nearestD = Infinity;
+    for (let k = 0; k < POCKETS.length; k++) {
+      const p = POCKETS[k];
+      const dx = b.x - p.x;
+      const dz = b.z - p.z;
+      const d2 = dx * dx + dz * dz;
+      if (d2 < nearestD) {
+        nearestD = d2;
+        nearest = k;
+      }
+    }
+    const p = POCKETS[nearest];
+    const outside = b.x > HALF_W + OUT_MARGIN || b.x < -HALF_W - OUT_MARGIN || b.z > HALF_L + OUT_MARGIN || b.z < -HALF_L - OUT_MARGIN;
+    if (nearestD < p.r * p.r || outside) pocketBall(b, p.id, events);
+  }
+}
+
+// Avanza todas las bolas un paso DT con deteccion continua de colisiones.
+export function step(state, events) {
+  const balls = state.balls;
+  const n = balls.length;
+  let remaining = DT;
+  for (let hit = 0; hit <= MAX_HITS_PER_STEP; hit++) {
+    // Buscar el primer impacto dentro del tiempo restante.
+    let tMin = remaining;
+    let kind = 0; // 0 nada, 1 bola-bola, 2 segmento, 3 punto
+    let ia = -1;
+    let ib = -1;
+    let cx = 0;
+    let cz = 0;
+    for (let i = 0; i < n; i++) {
+      const a = balls[i];
+      if (a.pocketed) continue;
+      const aMoves = a.vx !== 0 || a.vz !== 0;
+      for (let j = i + 1; j < n; j++) {
+        const b = balls[j];
+        if (b.pocketed) continue;
+        if (!aMoves && b.vx === 0 && b.vz === 0) continue;
+        const t = toiBallBall(a, b, tMin);
+        if (t >= 0 && t < tMin) {
+          tMin = t;
+          kind = 1;
+          ia = i;
+          ib = j;
+        }
+      }
+      if (!aMoves) continue;
+      for (let k = 0; k < CUSHIONS.length; k++) {
+        const c = CUSHIONS[k];
+        let t = toiBallSegment(a, c, tMin);
+        if (t >= 0 && t < tMin) {
+          tMin = t;
+          kind = 2;
+          ia = i;
+          ib = k;
+        }
+        t = toiBallPoint(a, c.x1, c.z1, tMin);
+        if (t >= 0 && t < tMin) {
+          tMin = t;
+          kind = 3;
+          ia = i;
+          cx = c.x1;
+          cz = c.z1;
+        }
+        t = toiBallPoint(a, c.x2, c.z2, tMin);
+        if (t >= 0 && t < tMin) {
+          tMin = t;
+          kind = 3;
+          ia = i;
+          cx = c.x2;
+          cz = c.z2;
+        }
+      }
+    }
+    // Si se agoto el cupo de impactos, el tiempo restante se descarta sin mover nada.
+    if (kind !== 0 && hit === MAX_HITS_PER_STEP) break;
+
+    if (tMin > 0) {
+      for (let i = 0; i < n; i++) {
+        const b = balls[i];
+        if (b.pocketed) continue;
+        b.x += b.vx * tMin;
+        b.z += b.vz * tMin;
+      }
+      checkPockets(balls, events);
+    }
+    remaining -= tMin;
+    if (kind === 0) break;
+
+    if (kind === 1) {
+      const a = balls[ia];
+      const b = balls[ib];
+      if (!a.pocketed && !b.pocketed) {
+        let nx = b.x - a.x;
+        let nz = b.z - a.z;
+        const d = Math.sqrt(nx * nx + nz * nz);
+        nx /= d;
+        nz /= d;
+        const vrel = (b.vx - a.vx) * nx + (b.vz - a.vz) * nz;
+        if (vrel < 0) {
+          const k = 0.5 * (1 + E_BALL) * vrel;
+          a.vx += k * nx;
+          a.vz += k * nz;
+          b.vx -= k * nx;
+          b.vz -= k * nz;
+          events.push({ type: 'ballBall', a: a.id, b: b.id, speed: -vrel });
+        }
+      }
+    } else if (kind === 2) {
+      const a = balls[ia];
+      const c = CUSHIONS[ib];
+      if (!a.pocketed) {
+        const d = (a.x - c.x1) * c.nx + (a.z - c.z1) * c.nz;
+        if (d >= 0) bounceOff(a, c.nx, c.nz, events);
+        else bounceOff(a, -c.nx, -c.nz, events);
+      }
+    } else {
+      const a = balls[ia];
+      if (!a.pocketed) {
+        let nx = a.x - cx;
+        let nz = a.z - cz;
+        const d = Math.sqrt(nx * nx + nz * nz);
+        if (d > 0) bounceOff(a, nx / d, nz / d, events);
+      }
+    }
+    if (remaining <= 0) break;
+  }
+  for (let i = 0; i < n; i++) {
+    if (!balls[i].pocketed && isMoving(balls[i])) applyFriction(balls[i]);
+  }
+}
+
+// ---------- Triangulo, tiro y colocacion de la blanca ----------
+
+const RACK_ROWS = [[1], [9, 2], [3, 8, 10], [11, 4, 12, 5], [6, 13, 14, 7, 15]];
+const HEAD_Z = 0.495; // linea de cabecera
+const FOOT_Z = -0.495; // vertice del triangulo
+
+export function createRack() {
+  const balls = [];
+  for (let i = 0; i < 16; i++) balls.push(makeBall(i, 0, 0));
+  balls[0].z = HEAD_Z;
+  const half = R + 0.5e-5; // media separacion entre centros
+  const rowStep = half * Math.sqrt(3);
+  for (let row = 0; row < RACK_ROWS.length; row++) {
+    const ids = RACK_ROWS[row];
+    for (let j = 0; j < ids.length; j++) {
+      const b = balls[ids[j]];
+      b.x = (2 * j - row) * half;
+      b.z = FOOT_Z - row * rowStep;
+    }
+  }
+  return { balls };
+}
+
+// Golpea la blanca. shot = { dirX, dirZ, speed } con direccion unitaria.
+export function strike(state, shot) {
+  const cue = state.balls[0];
+  cue.vx = shot.dirX * shot.speed;
+  cue.vz = shot.dirZ * shot.speed;
+  cue.wx = 0;
+  cue.wy = 0;
+  cue.wz = 0;
+}
+
+// Detiene todo lo que siga en movimiento (limite de duracion alcanzado).
+export function forceRest(state) {
+  for (const b of state.balls) {
+    stopBall(b);
+    b.wy = 0;
+  }
+}
+
+export function simulateShot(state, shot) {
+  const events = [];
+  strike(state, shot);
+  let steps = 0;
+  while (steps < MAX_STEPS && !isAtRest(state)) {
+    step(state, events);
+    steps++;
+  }
+  if (!isAtRest(state)) forceRest(state);
+  return { events, steps };
+}
+
+const CUE_CLEARANCE = 2 * R + 1e-4;
+
+export function isLegalCuePosition(state, x, z, kitchenOnly) {
+  if (x > HALF_W - R || x < -HALF_W + R || z > HALF_L - R || z < -HALF_L + R) return false;
+  if (kitchenOnly && z < HEAD_Z) return false;
+  for (const b of state.balls) {
+    if (b.id === 0 || b.pocketed) continue;
+    const dx = b.x - x;
+    const dz = b.z - z;
+    if (dx * dx + dz * dz < CUE_CLEARANCE * CUE_CLEARANCE) return false;
+  }
+  return true;
+}
+
+// 16 direcciones unitarias fijas, para buscar en anillos sin trigonometria.
+const C1 = 0.92388;
+const S1 = 0.382683;
+const H = 0.707107;
+const RING = [
+  [1, 0], [C1, S1], [H, H], [S1, C1], [0, 1], [-S1, C1], [-H, H], [-C1, S1],
+  [-1, 0], [-C1, -S1], [-H, -H], [-S1, -C1], [0, -1], [S1, -C1], [H, -H], [C1, -S1],
+];
+
+// Punto legal mas cercano a (x, z) para colocar la blanca.
+export function findFreeSpot(state, x, z, kitchenOnly) {
+  if (isLegalCuePosition(state, x, z, kitchenOnly)) return { x, z };
+  for (let k = 1; k <= 400; k++) {
+    const r = k * R * 0.25;
+    for (let i = 0; i < RING.length; i++) {
+      const px = x + RING[i][0] * r;
+      const pz = z + RING[i][1] * r;
+      if (isLegalCuePosition(state, px, pz, kitchenOnly)) return { x: px, z: pz };
+    }
+  }
+  return { x: 0, z: HEAD_Z };
+}
