@@ -229,6 +229,7 @@ html, body {
   letter-spacing: -2px; text-transform: uppercase; font-stretch: condensed;
   text-shadow: 0 0 34px rgba(53, 224, 143, 0.35);
 }
+.menu .version { margin: 6px 0 0 3px; font-size: 11px; letter-spacing: 0.6px; color: var(--dim); opacity: 0.8; }
 .menu .byline { margin: -8px 0 16px 3px; font-size: 13px; font-weight: 600; letter-spacing: 1.2px; color: var(--dim); }
 .menu .list { display: flex; flex-direction: column; gap: 2px; margin: 6px 0 10px; }
 .menu .item {

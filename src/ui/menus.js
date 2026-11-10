@@ -1,5 +1,9 @@
 // Menus: inicio, pausa, como se juega, ajustes y fin de partida.
 
+// Version que ha cargado de verdad el navegador: la saca del ?v=N con que se importo este modulo.
+const VERSION = new URL(import.meta.url).searchParams.get('v') || 'local';
+const VERSION_LINE = `<p class="version">Versión ${VERSION}</p>`;
+
 const SCREENS = {
   // Portada: menu a la izquierda, la mesa se ve a la derecha.
   inicio: `
@@ -12,6 +16,7 @@ const SCREENS = {
       <button class="item" data-go="ayuda"><span>Controles</span></button>
       <button class="item" data-go="ajustes"><span>Ajustes</span></button>
     </nav>
+    ${VERSION_LINE}
     <p class="status"></p>`,
   unjugador: `
     <p class="kicker">Un jugador</p>
@@ -119,6 +124,7 @@ const SCREENS = {
       <label class="check"><input type="checkbox" data-key="blackPocket"> Negra a la tronera contraria</label>
       <label class="check"><input type="checkbox" data-key="showFps"> Mostrar fotogramas por segundo</label>
     </div>
+    ${VERSION_LINE}
     <button class="btn primary" data-act="back">Volver</button>`,
   fin: `
     <h2 class="winner"></h2>
