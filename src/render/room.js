@@ -2,7 +2,11 @@
 // Ejes: x este, z sur, origen en el centro de la mesa. Medidas estimadas con la mesa como escala.
 
 import * as THREE from 'three';
-import { makeNoiseTexture, makeBumpTexture, makeDartboardTexture, makePosterTexture, makeSignTexture } from './textures.js';
+import {
+  makeNoiseTexture, makeBumpTexture, makeDartboardTexture, makePosterTexture, makeSignTexture,
+  makeNeonRackTexture, makeWashTexture, makeCirclesPanelTexture, makePlasticTexture, makeSafetySignTexture,
+} from './textures.js';
+import { buildFoosball, buildShellChair, buildVendingMachine, buildHighTable, buildCafeSet } from './props.js';
 
 export const ROOM = {
   minX: -4.6, maxX: 7.3, minZ: -8.0, maxZ: 5.7, height: 3.0,
@@ -22,6 +26,11 @@ export function buildRoom() {
   const carpet = std({ map: makeNoiseTexture({ base: '#7b7c80', spread: 30, seed: 21, repeat: 10 }), bumpMap: makeBumpTexture({ seed: 9, repeat: 10 }), bumpScale: 0.6, roughness: 1 });
   const wallDark = std({ map: makeNoiseTexture({ base: '#4a4e52', spread: 8, seed: 3, repeat: 3 }), roughness: 0.95 });
   const wallGrey = std({ map: makeNoiseTexture({ base: '#63676b', spread: 8, seed: 4, repeat: 3 }), roughness: 0.95 });
+  for (const m of [wallDark, wallGrey]) {
+    m.emissive = new THREE.Color('#ffffff');
+    m.emissiveMap = m.map;
+    m.emissiveIntensity = 2.8;
+  }
   const wallPale = std({ color: '#b3a199', roughness: 0.9 });
   const ceilingMat = std({ color: '#1b1b1e', roughness: 1 });
   const concrete = std({ map: makeNoiseTexture({ base: '#d6d3c8', spread: 14, seed: 8 }), bumpMap: makeBumpTexture({ seed: 12, pits: 260 }), bumpScale: 0.5, roughness: 0.92 });
@@ -41,7 +50,7 @@ export function buildRoom() {
   const darkWood = std({ color: '#2a1c16', roughness: 0.5 });
   const chrome = std({ color: '#d0d3d6', roughness: 0.25, metalness: 1, envMapIntensity: 1 });
   const red = std({ color: '#b3202a', roughness: 0.5 });
-  const glass = new THREE.MeshPhysicalMaterial({ color: '#ffffff', transparent: true, opacity: 0.12, roughness: 0.03, metalness: 0, envMapIntensity: 1.6, depthWrite: false });
+  const glass = new THREE.MeshPhysicalMaterial({ color: '#ffffff', transparent: true, opacity: 0.1, roughness: 0.03, metalness: 0, envMapIntensity: 0.7, depthWrite: false });
   // Material que emite luz. boost > 1 lo saca del rango normal para que el resplandor lo recoja.
   const emissive = (color, boost = 1) => {
     const m = new THREE.MeshBasicMaterial({ color });
@@ -81,16 +90,16 @@ export function buildRoom() {
   const textured = (tex, extra = {}) => std({ map: tex, roughness: 0.8, ...extra });
 
   // ---------- Suelo y techo ----------
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(30, 26), carpet);
-  carpet.map.repeat.set(30, 26);
-  carpet.bumpMap.repeat.set(30, 26);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(46, 30), carpet);
+  carpet.map.repeat.set(46, 30);
+  carpet.bumpMap.repeat.set(46, 30);
   floor.rotation.x = -Math.PI / 2;
-  floor.position.set(3, 0, 0);
+  floor.position.set(6, 0, 0);
   floor.receiveShadow = true;
   group.add(floor);
-  const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(30, 26), ceilingMat);
+  const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(46, 30), ceilingMat);
   ceiling.rotation.x = Math.PI / 2;
-  ceiling.position.set(3, H, 0);
+  ceiling.position.set(6, H, 0);
   group.add(ceiling);
 
   const W = ROOM.minX; // pared oeste
@@ -124,8 +133,20 @@ export function buildRoom() {
   block(W - 0.2, W, 0, WIN.y0, WIN.z0, WIN.z1, wallDark, { cast: false });
   block(W - 0.2, W, WIN.y1, H, WIN.z0, WIN.z1, wallDark, { cast: false });
   block(W - 0.2, W, 0, H, N, WIN.z0, wallDark, { cast: false });
-  block(W - 0.2, W, 0, H, WIN.z1, 3.2, wallDark, { cast: false });
-  collide(W - 0.2, W, N, 3.2);
+  // Al sur del ventanal empieza el pasillo de las maquinas: murete con cristal encima.
+  const COR = { z0: 2.9, z1: 7.6, end: 9.4, sill: 1.12, top: 2.45 };
+  block(W - 0.2, W, 0, H, WIN.z1, COR.z0, wallDark, { cast: false });
+  block(W - 0.2, W, 0, COR.sill, COR.z0, COR.z1, wallDark, { cast: false });
+  block(W - 0.22, W + 0.02, COR.sill, COR.sill + 0.03, COR.z0, COR.z1, blackMat, { cast: false });
+  block(W - 0.2, W, COR.top, H, COR.z0, COR.z1, wallDark, { cast: false });
+  block(W - 0.25, W + 0.03, 0, H, COR.z1, COR.z1 + 0.45, std({ color: '#d9d5d0', roughness: 0.85 }), { cast: false });
+  block(W - 0.2, W, 0, H, COR.z1 + 0.45, COR.end, wallDark, { cast: false });
+  collide(W - 0.2, W, N, COR.end);
+  const pane2 = new THREE.Mesh(new THREE.PlaneGeometry(COR.z1 - COR.z0, COR.top - COR.sill), glass);
+  pane2.position.set(W - 0.01, (COR.sill + COR.top) / 2, (COR.z0 + COR.z1) / 2);
+  pane2.rotation.y = Math.PI / 2;
+  group.add(pane2);
+  for (const z of [4.45, 6.0]) block(W - 0.015, W - 0.005, COR.sill, COR.top, z - 0.006, z + 0.006, metalDark, { cast: false });
   // Marco blanco del ventanal y cristales.
   block(W - 0.04, W + 0.04, WIN.y0 - 0.05, WIN.y0, WIN.z0, WIN.z1, white, { cast: false });
   block(W - 0.04, W + 0.04, WIN.y1, WIN.y1 + 0.05, WIN.z0, WIN.z1, white, { cast: false });
@@ -145,18 +166,50 @@ export function buildRoom() {
   block(BACK, W - 0.2, H - 0.3, H - 0.25, N, 3.2, emissive('#a7a19e'), { cast: false });
   block(BACK, W - 0.2, 0.6, H, N - 0.05, N, whiteRoom, { cast: false });
   block(BACK, W - 0.2, 0.6, H, 3.2, 3.25, whiteRoom, { cast: false });
-  const tubeColors = ['#fff6e8', '#ffd23c', '#ff9a2e', '#ff5a8a', '#ff4fd0', '#fff6e8', '#eaf6ff', '#55d8ff', '#55d8ff'];
-  const tubeGeo = new THREE.CylinderGeometry(0.018, 0.018, 0.34, 8);
+  const tubeColors = ['#fff6e8', '#ffd23c', '#ffb02e', '#ffe9ef', '#ff5aa8', '#ff8fd0', '#fff6e8', '#fff6e8', '#bfeaff', '#55d8ff'];
+  const tubeGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.36, 8);
   tubeColors.forEach((color, col) => {
-    const mat = emissive(color, 5);
-    for (let row = 0; row < 4; row++) {
+    const mat = emissive(color, 2.2);
+    for (let row = 0; row < 3; row++) {
       const t = new THREE.Mesh(tubeGeo, mat);
-      t.position.set(BACK + 0.13, 1.42 + row * 0.3, 1.6 - col * 0.42);
-      t.rotation.x = (col + row) % 2 ? 0.6 : -0.6;
+      t.position.set(BACK + 0.13, 1.5 + row * 0.36, 1.9 - col * 0.4);
+      // Zigzag: cada fila se inclina al reves que la anterior.
+      t.rotation.x = row % 2 ? 0.62 : -0.62;
       group.add(t);
       glow.push(t);
     }
   });
+  // Rotulo de neon colgado delante de los tubos, con la misma silueta que el verde.
+  {
+    const logo = [[-0.6, 0.7], [0.55, 0.7], [0.65, 0.6], [0.65, 0.12], [0.44, -0.1], [0.44, -0.22], [0.63, -0.58], [0.52, -0.7], [-0.6, -0.7], [-0.68, -0.6], [-0.68, 0.6]]
+      .map(([a, b]) => new THREE.Vector3(BACK + 0.55, 1.95 + b * 0.5, 0.1 + a * 0.5));
+    const half = Math.ceil(logo.length / 2);
+    const top = new THREE.CatmullRomCurve3(logo.slice(0, half + 1), false, 'catmullrom', 0.12);
+    const bottom = new THREE.CatmullRomCurve3([...logo.slice(half), logo[0]], false, 'catmullrom', 0.12);
+    const l1 = new THREE.Mesh(new THREE.TubeGeometry(top, 60, 0.012, 6), emissive('#6ff0e0', 4));
+    const l2 = new THREE.Mesh(new THREE.TubeGeometry(bottom, 60, 0.012, 6), emissive('#ff6ad0', 4));
+    group.add(l1, l2);
+    glow.push(l1, l2);
+  }
+  // Carril de focos negros dentro de la sala blanca.
+  block(W - 1.0, W - 0.97, 2.56, 2.59, -2.6, 1.6, blackMat, { cast: false });
+  for (const z of [-2.2, -1.0, 0.2, 1.3]) block(W - 1.03, W - 0.94, 2.4, 2.56, z - 0.04, z + 0.04, blackMat, { cast: false });
+
+  // Sala de neones tras el cristal del pasillo.
+  {
+    const B2 = W - 3.4;
+    const dim = emissive('#8c8789');
+    block(B2 - 0.1, B2, 0.4, H, 3.25, COR.end, dim, { cast: false });
+    block(B2, W - 0.2, 0.5, 0.55, 3.25, COR.end, emissive('#5d5a5e'), { cast: false });
+    block(B2, W - 0.2, 2.62, 2.67, 3.25, COR.end, emissive('#a39ea0'), { cast: false });
+    block(B2, W - 0.2, 0.5, H, COR.end, COR.end + 0.05, dim, { cast: false });
+    const rackMat = new THREE.MeshBasicMaterial({ map: makeNeonRackTexture(), toneMapped: false });
+    rackMat.color.multiplyScalar(1.7);
+    panel(4.4, 1.65, rackMat, W - 1.7, 1.72, 5.3, 'e');
+    const rackFar = rackMat.clone();
+    rackFar.color.multiplyScalar(0.6);
+    panel(4.4, 1.65, rackFar, W - 2.9, 1.72, 6.3, 'e');
+  }
 
   // Sur: cristalera con plantas, pilar, pasillo de salida y pared curva.
   const GL0 = 1.2;
@@ -180,10 +233,25 @@ export function buildRoom() {
   block(0.4, 12, 0, H, 10, 10.1, wallDark, { cast: false });
   panel(1.6, 0.9, emissive('#c76a1e'), 2.6, 1.2, 9.95, 'n');
   panel(1.0, 0.5, emissive('#2bd67a'), 4.8, 1.7, 9.95, 'n');
-  // Banco de madera clara bajo la cristalera.
-  block(2.9, 5.2, 0.4, 0.46, S - 0.75, S - 0.3, wood);
-  for (const x of [3.0, 4.05, 5.1]) block(x - 0.05, x + 0.05, 0, 0.4, S - 0.7, S - 0.35, wood);
-  collide(2.9, 5.2, S - 0.75, S);
+  // Banco curvo de madera clara bajo la cristalera, con cojines redondos grises.
+  {
+    const cx = 4.05, cz = S + 1.75, r0 = 1.95, r1 = 2.45, a0 = -Math.PI / 2 - 0.62, a1 = -Math.PI / 2 + 0.62;
+    const sh = new THREE.Shape();
+    sh.absarc(0, 0, r1, a0, a1, false);
+    sh.absarc(0, 0, r0, a1, a0, true);
+    const geo = new THREE.ExtrudeGeometry(sh, { depth: 0.44, bevelEnabled: false, curveSegments: 20 });
+    geo.rotateX(Math.PI / 2); // la forma (x, y) pasa al suelo (x, z) y el grosor queda hacia abajo
+    const bench = new THREE.Mesh(geo, wood);
+    bench.position.set(cx, 0.44, cz);
+    bench.castShadow = true;
+    bench.receiveShadow = true;
+    group.add(bench);
+    for (const a of [-0.42, 0, 0.42]) {
+      const ang = -Math.PI / 2 + a;
+      cyl(0.2, 0.035, greyFabric, cx + Math.cos(ang) * 2.2, 0.458, cz + Math.sin(ang) * 2.2, 20);
+    }
+    collide(2.5, 5.6, S - 0.75, S);
+  }
   // Pilar recto sur.
   block(0.55, 1.2, 0, H, S - 0.35, S + 0.3, concrete, { collide: true });
   // Pasillo de salida: se ve pero no se entra.
@@ -196,21 +264,49 @@ export function buildRoom() {
   block(C1, 0.55, 0, H, S - 0.05, S + 0.05, wallDark, { cast: false });
   panel(0.5, 0.17, new THREE.MeshBasicMaterial({ map: makeSignTexture({ text: 'SALIDA' }), toneMapped: false }), (C0 + C1) / 2, 2.42, S - 0.06, 'n');
   collide(C0 - 0.2, 0.6, S - 0.12, S + 0.3);
-  // Pared curva del suroeste, en tramos.
-  const arc = [[C0, S], [-1.8, S - 0.1], [-2.9, S - 0.5], [-3.8, S - 1.2], [-4.3, S - 1.9], [W, 3.2]];
+  // Pared curva del suroeste: gira hacia el sur y hace de lado este del pasillo de las maquinas.
+  const arc = [[C0, S], [-1.2, S - 0.2], [-1.75, S + 0.1], [-2.0, S + 0.7], [-2.05, S + 1.6], [-1.95, COR.end]];
   for (let i = 0; i < arc.length - 1; i++) {
     const [x0, z0] = arc[i];
     const [x1, z1] = arc[i + 1];
     const len = Math.hypot(x1 - x0, z1 - z0);
-    const m = new THREE.Mesh(new THREE.BoxGeometry(len + 0.06, H, 0.2), wallDark);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(len + 0.08, H, 0.2), wallDark);
     m.position.set((x0 + x1) / 2, H / 2, (z0 + z1) / 2);
     m.rotation.y = -Math.atan2(z1 - z0, x1 - x0);
     m.translateZ(-0.1);
     m.receiveShadow = true;
     group.add(m);
-    collide(Math.min(x0, x1) - 0.05, Math.max(x0, x1) + 0.05, Math.min(z0, z1) - 0.05, S + 1);
   }
-  // Armario rojo, extintor, senal y puerta clara sobre la pared curva.
+  collide(-1.8, C0 + 0.05, S - 0.3, S + 1);
+  // El pasillo se ve pero no se entra.
+  collide(W, -1.7, S - 0.1, S + 0.3);
+  // Fondo del pasillo y techo rebajado.
+  block(W - 0.2, -1.8, 0, H, COR.end, COR.end + 0.2, std({ color: '#3f3c45', roughness: 0.95, emissive: '#3f3c45', emissiveIntensity: 0.5 }), { cast: false });
+  const soffit = std({ color: '#4c4d50', roughness: 1, emissive: '#4c4d50', emissiveIntensity: 0.45 });
+  block(W - 0.2, -2.62, 2.5, H, 3.7, COR.end, soffit, { cast: false });
+  block(-2.62, -1.95, 2.5, H, S + 0.3, COR.end, soffit, { cast: false });
+  for (const [x, z] of [[-3.3, 4.3], [-4.0, 5.6], [-3.2, 6.6], [-4.0, 7.6], [-3.3, 8.6]]) {
+    block(x - 0.035, x + 0.035, 2.37, 2.5, z - 0.035, z + 0.035, blackMat, { cast: false });
+    const lens = new THREE.Mesh(new THREE.CircleGeometry(0.026, 10), emissive('#fff3da', 4));
+    lens.rotation.x = Math.PI / 2;
+    lens.position.set(x, 2.366, z);
+    group.add(lens);
+  }
+  block(-3.9, -3.3, 2.49, 2.5, 5.0, 5.35, blackMat, { cast: false });
+  block(-3.6, -3.0, 2.49, 2.5, 7.0, 7.35, blackMat, { cast: false });
+  // Maquinas expendedoras al fondo, mirando al norte.
+  {
+    const snack = buildVendingMachine('snack');
+    snack.position.set(-3.1, 0, COR.end - 0.4);
+    snack.rotation.y = Math.PI;
+    const coffee = buildVendingMachine('coffee');
+    coffee.position.set(-3.93, 0, COR.end - 0.35);
+    coffee.rotation.y = Math.PI;
+    const table = buildHighTable();
+    table.position.set(-2.34, 0, 8.72);
+    group.add(snack, coffee, table);
+  }
+  // Senales, armario rojo, extintor y puerta sobre la pared del pasillo.
   function onWall(x0, z0, x1, z1, t, build) {
     const g = new THREE.Group();
     g.position.set(x0 + (x1 - x0) * t, 0, z0 + (z1 - z0) * t);
@@ -218,36 +314,95 @@ export function buildRoom() {
     build(g);
     group.add(g);
   }
-  onWall(-1.8, S - 0.1, -2.9, S - 0.5, 0.4, (g) => {
-    const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.6), std({ color: '#c8322e', roughness: 0.6 }));
-    sign.position.set(0, 2.0, 0.012);
+  const flat = (w, h, mat, x, y) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+    m.position.set(x, y, 0.012);
+    return m;
+  };
+  const signTall = std({ map: makeSafetySignTexture({ tall: true }), roughness: 0.6 });
+  const signSmall = std({ map: makeSafetySignTexture({ tall: false }), roughness: 0.6 });
+  onWall(...arc[2], ...arc[3], 0.5, (g) => {
+    const bell = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.07, 16), red);
+    bell.rotation.x = Math.PI / 2;
+    bell.position.set(0.12, 2.15, 0.05);
+    g.add(flat(0.2, 0.5, signTall, 0.12, 1.75), bell, flat(0.11, 0.22, signSmall, 0.12, 2.38));
+  });
+  onWall(...arc[3], ...arc[4], 0, (g) => {
     const teal = new THREE.Mesh(new THREE.CircleGeometry(0.13, 24), emissive('#3db8c4'));
-    teal.position.set(0.55, 1.75, 0.012);
-    g.add(sign, teal);
+    teal.position.set(0.12, 1.75, 0.012);
+    const cab = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.85, 0.16), red);
+    cab.position.set(0.58, 1.42, 0.08);
+    const call = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.04), red);
+    call.position.set(0.2, 0.78, 0.02);
+    g.add(teal, flat(0.1, 0.24, signSmall, 0.2, 2.05), flat(0.1, 0.24, signSmall, 0.36, 2.05), cab, call);
   });
-  onWall(-2.9, S - 0.5, -3.8, S - 1.2, 0.5, (g) => {
-    const cab = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.65, 0.16), red);
-    cab.position.set(0, 1.45, 0.08);
-    const ext = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.42, 12), red);
-    ext.position.set(0.5, 1.05, 0.1);
-    g.add(cab, ext);
-  });
-  onWall(-3.8, S - 1.2, -4.3, S - 1.9, 0.5, (g) => {
-    const door = new THREE.Mesh(new THREE.PlaneGeometry(0.85, 2.05), std({ color: '#dcd9d2', roughness: 0.6 }));
-    door.position.set(0, 1.03, 0.012);
-    g.add(door);
+  onWall(...arc[4], ...arc[5], 0, (g) => {
+    const ext = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.065, 0.42, 12), red);
+    ext.position.set(0.12, 0.98, 0.09);
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.03, 0.1, 8), blackMat);
+    neck.position.set(0.12, 1.24, 0.09);
+    const frame = flat(0.98, 2.14, std({ color: '#e6e3dc', roughness: 0.6 }), 0.78, 1.07);
+    const door = flat(0.84, 2.04, std({ color: '#cfccc5', roughness: 0.55 }), 0.78, 1.02);
+    door.position.z = 0.016;
+    g.add(ext, neck, frame, door, flat(0.1, 0.1, emissive('#39c46a'), 1.42, 1.62));
   });
 
   // Limite del sureste: la zona de cafeteria se ve pero no se pisa.
-  collide(8.0, 12, E_END, S + 0.4);
-  collide(E, 12, E_END - 0.2, E_END + 0.2);
-  // Fondo de la cafeteria: pared lejana y bultos calidos.
-  block(13, 13.1, 0, H, -2, 10, wallDark, { cast: false });
-  panel(2.4, 1.0, emissive('#b5651f'), 12.95, 1.3, 2.0, 'w');
-  panel(0.9, 0.8, emissive('#e0c020'), 12.95, 0.9, 4.6, 'w');
-  block(9.6, 10.6, 0, 0.45, 3.4, 4.4, orangeFabric, { cast: false });
-  block(10.4, 11.6, 0.7, 0.74, 0.8, 1.8, white, { cast: false });
-  block(E + 0.2, 13, 0, H, E_END - 2.2, E_END - 2.0, wallDark, { cast: false });
+  collide(8.0, 30, E_END, S + 1);
+  collide(E, 30, E_END - 0.2, E_END + 0.2);
+  {
+    // Sin luces reales tan lejos: materiales que ya llevan pintado su bano de luz.
+    const far = (color) => new THREE.MeshBasicMaterial({ color, toneMapped: false });
+    const wash = (o) => new THREE.MeshBasicMaterial({ map: makeWashTexture(o), toneMapped: false });
+    // Tramo de pared con el panel de circulos envuelto en plastico y los cubos azules.
+    block(E, 9.25, 0, H, E_END - 0.2, E_END, wallDark, { cast: false });
+    panel(1.7, 2.4, std({ map: makeCirclesPanelTexture(), roughness: 0.5 }), 8.35, 1.22, E_END + 0.03, 's');
+    const wrap = panel(1.95, 2.55, new THREE.MeshPhysicalMaterial({
+      map: makePlasticTexture(), color: '#ffffff', transparent: true, opacity: 0.55, roughness: 0.12, envMapIntensity: 1.2, depthWrite: false,
+    }), 8.35, 1.28, E_END + 0.1, 's');
+    wrap.rotation.x = 0.03;
+    const bucket = std({ color: '#2456b8', roughness: 0.45 });
+    cyl(0.13, 0.27, bucket, 8.95, 0.135, E_END + 0.45, 16, 0.16);
+    cyl(0.13, 0.27, bucket, 9.25, 0.135, E_END + 0.3, 16, 0.16);
+    // Hueco de puerta con suelo naranja.
+    block(9.25, 9.95, 0, 0.012, -1.6, E_END, far('#c4561a'), { cast: false });
+    block(9.25, 9.95, 0, H, -1.7, -1.6, far('#17181a'), { cast: false });
+    block(9.25, 9.95, 2.2, H, E_END - 0.2, E_END, far('#1d1e21'), { cast: false });
+    // Bloque gris iluminado por un foco.
+    block(9.95, 13.3, 0, H, -2.0, 1.7, far('#33363a'), { cast: false });
+    panel(3.35, H, wash({ base: '#3a3d41', light: '#8f918e', spread: 0.55 }), 11.625, H / 2, 1.705, 's');
+    panel(1.1, H, wash({ base: '#2c2e32', light: '#4a4c4f', spread: 0.6 }), 9.945, H / 2, 1.15, 'w');
+    panel(0.2, 0.2, far('#e8cf1c'), 9.94, 1.92, 1.25, 'w').geometry = new THREE.CircleGeometry(0.1, 20);
+    // Segundo bloque, mas lejos, con cartel, extintor y macetero.
+    block(15.0, 16.0, 0, H, -2.0, 2.4, far('#4b4e53'), { cast: false });
+    panel(1.0, H, wash({ base: '#484b50', light: '#7d7f80', spread: 0.6 }), 14.995, H / 2, 1.9, 'w');
+    panel(0.22, 0.16, far('#d9d9d6'), 14.99, 1.85, 1.9, 'w');
+    cyl(0.06, 0.4, far('#8f1f24'), 14.9, 0.9, 2.5, 10);
+    cyl(0.2, 0.4, far('#a9a8a2'), 14.6, 0.2, 2.6, 16);
+    // Pared del fondo, con dos banos de luz, y cierre norte y sur de la cafeteria.
+    block(23, 23.1, 0, H, -2, 9, far('#2b2d31'), { cast: false });
+    panel(4.5, H, wash({ base: '#2b2d31', light: '#5c5e60', spread: 0.6 }), 22.99, H / 2, 2.6, 'w');
+    panel(4.5, H, wash({ base: '#2b2d31', light: '#5c5e60', spread: 0.6 }), 22.99, H / 2, 6.6, 'w');
+    block(16.0, 23, 0, H, 0.6, 0.7, far('#26282b'), { cast: false });
+    block(GL1, 23, 0, H, 7.6, 7.7, far('#1b1c1f'), { cast: false });
+    // Pilar verde palido y puf blanco.
+    block(12.3, 13.3, 0, H, 5.9, 6.4, far('#8fa095'), { cast: false });
+    cyl(0.6, 0.42, far('#a7a6a1'), 17.0, 0.21, 2.6, 24);
+    // Mesas con sillas claras y una amarilla.
+    const set1 = buildCafeSet(['#b9b4a8', '#b9b4a8', '#b9b4a8', '#b9b4a8']);
+    set1.position.set(18.6, 0, 3.6);
+    const set2 = buildCafeSet(['#b9b4a8', '#d9b21c', '#b9b4a8', '#b9b4a8']);
+    set2.position.set(20.6, 0, 4.4);
+    set2.rotation.y = 0.2;
+    const set3 = buildCafeSet(['#b9b4a8', '#b9b4a8', '#d9b21c', '#b9b4a8']);
+    set3.position.set(19.4, 0, 6.2);
+    set3.rotation.y = -0.15;
+    group.add(set1, set2, set3);
+    // Lineas de luz del techo liso de esa zona.
+    for (const [x, z] of [[11.0, 3.4], [13.6, 4.6], [16.4, 3.2], [18.8, 5.0], [21.0, 3.6]]) {
+      block(x - 0.4, x + 0.4, H - 0.015, H - 0.005, z - 0.03, z + 0.03, emissive('#f3f1ea', 2), { cast: false });
+    }
+  }
 
   // ---------- Gradas ----------
   const G0 = -3.3; // extremo oeste de los niveles
@@ -350,33 +505,18 @@ export function buildRoom() {
     cyl(r + 0.01, 0.02, white, x, h + 0.01, z);
     collide(x - r, x + r, z - r, z + r);
   }
-  wireTable(-2.8, -0.1, 0.24, 0.42);
+  wireTable(-3.2, -0.75, 0.24, 0.42);
   wireTable(-4.0, -4.95, 0.2, 0.4);
 
-  // Sillon naranja.
-  const chair = new THREE.Group();
-  const seat = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.1, 0.55), orangeSeat);
-  seat.position.set(0, 0.42, 0);
-  const back = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.5, 0.09), orangeSeat);
-  back.position.set(0, 0.68, -0.27);
-  back.rotation.x = -0.18;
-  chair.add(seat, back);
-  for (const sd of [-1, 1]) {
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.24, 0.5), orangeSeat);
-    arm.position.set(sd * 0.3, 0.54, -0.02);
-    chair.add(arm);
-    for (const t of [-1, 1]) {
-      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.4, 6), blackMat);
-      leg.position.set(sd * 0.25, 0.2, t * 0.22);
-      leg.rotation.z = sd * -0.1;
-      chair.add(leg);
-    }
+  // Sillones naranjas: uno junto al pilar y dos a la entrada del pasillo.
+  for (const [x, z, ry] of [[-4.0, 0.15, Math.PI / 2 - 0.2], [-4.0, 3.75, Math.PI / 2 - 0.15], [-3.7, 4.95, Math.PI / 2 + 0.75]]) {
+    const chair = buildShellChair();
+    chair.position.set(x, 0, z);
+    chair.rotation.y = ry;
+    group.add(chair);
+    collide(x - 0.33, x + 0.33, z - 0.33, z + 0.33);
   }
-  chair.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-  chair.position.set(-4.05, 0, -1.5);
-  chair.rotation.y = Math.PI / 2 - 0.25;
-  group.add(chair);
-  collide(-4.4, -3.7, -1.85, -1.15);
+  wireTable(-4.15, 4.4, 0.17, 0.36);
 
   // Pared este: cuadro electrico, pizarra, diana, cartel, taquera, senales y mesita.
   const EW = E - 0.01;
@@ -398,51 +538,17 @@ export function buildRoom() {
     const leaflet = panel(0.2, 0.28, textured(makePosterTexture({ w: 256, h: 360, bg: '#d6ecd2', seed: z > -3.3 ? 5 : 9 })), E - 0.3, 0.5, z, 'w');
     leaflet.rotation.x = -0.15;
   }
-  // Lona con circulos al final de la pared este.
-  const tarp = new THREE.Group();
-  const sheet = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 2.1), std({ color: '#b9bdc0', roughness: 0.25, transparent: true, opacity: 0.8, side: THREE.DoubleSide }));
-  sheet.position.y = 1.3;
-  tarp.add(sheet);
-  for (const [x, y, c] of [[-0.25, 1.95, '#e9e9e4'], [0.25, 1.5, '#e06a2a'], [-0.2, 1.05, '#e9e9e4'], [0.3, 0.7, '#e06a2a']]) {
-    const dot = new THREE.Mesh(new THREE.CircleGeometry(0.22, 20), std({ color: c, roughness: 0.6 }));
-    dot.position.set(x, y, 0.01);
-    tarp.add(dot);
-  }
-  tarp.position.set(E - 0.3, 0, -0.4);
-  tarp.rotation.y = -Math.PI / 2 - 0.35;
-  group.add(tarp);
+  // Tablero verde lima sobre un pie, junto a la pared este.
+  cyl(0.012, 1.5, blackMat, E - 0.35, 0.75, -0.75, 8);
+  cyl(0.16, 0.03, blackMat, E - 0.35, 0.015, -0.75, 16);
+  panel(0.55, 0.8, std({ color: '#c3dc4a', roughness: 0.7, side: THREE.DoubleSide }), E - 0.37, 1.72, -0.75, 'w');
 
-  // Futbolin.
-  const fb = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.3, 0.76), darkWood);
-  body.position.y = 0.78;
-  const field = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.01, 0.62), std({ color: '#2f7d4a', roughness: 0.8 }));
-  field.position.y = 0.9;
-  fb.add(body, field);
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.64, 0.09), darkWood);
-    leg.position.set(sx * 0.6, 0.32, sz * 0.3);
-    fb.add(leg);
-  }
-  const blue = std({ color: '#3a66c8', roughness: 0.6 });
-  for (let i = 0; i < 8; i++) {
-    const x = -0.52 + i * 0.148;
-    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 1.15, 8), chrome);
-    rod.rotation.x = Math.PI / 2;
-    rod.position.set(x, 0.99, 0);
-    fb.add(rod);
-    const count = [1, 2, 3, 5, 5, 3, 2, 1][i];
-    for (let k = 0; k < count; k++) {
-      const man = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.1, 0.035), [0, 1, 3, 5].includes(i) ? white : blue);
-      man.position.set(x, 0.96, (k - (count - 1) / 2) * (0.5 / Math.max(count, 2)));
-      fb.add(man);
-    }
-  }
-  fb.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  // Futbolin, bajo la A del sureste.
+  const fb = buildFoosball();
   fb.position.set(5.4, 0, 2.4);
   fb.rotation.y = 0.12;
   group.add(fb);
-  collide(4.65, 6.15, 1.95, 2.85);
+  collide(4.6, 6.2, 1.8, 3.0);
 
   // ---------- Techo: tuberias, carriles de focos y discos acusticos ----------
   const pipe = (x0, z0, x1, z1, r = 0.045) => {
