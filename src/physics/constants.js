@@ -16,6 +16,16 @@ export const DT = 1 / 240; // paso fijo de simulacion
 export const V_REST = 0.005; // por debajo de esta velocidad la bola se detiene
 export const MIN_CUE_SPEED = 0.3;
 export const MAX_CUE_SPEED = 9;
+export const TOP_BOOST = 1.5; // extra solo en lo mas alto de la barra, para el saque
+
+// Velocidad de la blanca segun la fuerza elegida (0 a 1). Los tiros normales no cambian:
+// el termino p^8 solo pesa cerca del maximo, que llega a 10,5 m/s.
+export function cueSpeed(p) {
+  const q = p < 0 ? 0 : p > 1 ? 1 : p;
+  const q2 = q * q;
+  const q8 = q2 * q2 * q2 * q2;
+  return MIN_CUE_SPEED + q2 * (MAX_CUE_SPEED - MIN_CUE_SPEED) + q8 * TOP_BOOST;
+}
 export const MAX_STEPS = 240 * 45; // limite de duracion de un tiro
 
 export const MU_CUSHION = 0.14; // agarre de la banda sobre el efecto lateral

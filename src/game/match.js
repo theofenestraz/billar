@@ -1,7 +1,7 @@
 // Coordinador de la partida: une la fisica con las reglas.
 // No conoce la pantalla: la interfaz lo consulta y escucha sus avisos.
 
-import { MIN_CUE_SPEED, MAX_CUE_SPEED, MAX_STEPS } from '../physics/constants.js';
+import { MAX_STEPS, cueSpeed } from '../physics/constants.js';
 import { createRack, strike, step, isAtRest, forceRest, findFreeSpot, isLegalCuePosition } from '../physics/simulate.js';
 import { newMatch, summarizeShot, applyShot, rematch as rulesRematch } from '../rules/eightball.js';
 import { newSolo, applySoloShot } from '../rules/solo.js';
@@ -49,8 +49,7 @@ export function createGame(names) {
     // side y top: efecto, de -1 a 1 (ver strike).
     shoot(dirX, dirZ, power01, side = 0, top = 0) {
       if (game.state !== 'aiming' || !(power01 >= MIN_POWER)) return false;
-      const p = power01 > 1 ? 1 : power01;
-      const speed = MIN_CUE_SPEED + p * p * (MAX_CUE_SPEED - MIN_CUE_SPEED);
+      const speed = cueSpeed(power01);
       strike(game.table, { dirX, dirZ, speed, side, top });
       shotEvents = [];
       steps = 0;

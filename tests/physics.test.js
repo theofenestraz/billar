@@ -231,3 +231,33 @@ test('findFreeSpot: returns the nearest free point when the spot is taken', () =
   assert(!isLegalCuePosition(s, 0, 0.2, true), 'outside kitchen accepted');
   assert(isLegalCuePosition(s, 0, 0.2, false), 'anywhere rejected');
 });
+
+import { createRack as rackForBreak, strike as strikeForBreak, step as stepForBreak, isAtRest as restForBreak } from '../src/physics/simulate.js';
+import { cueSpeed } from '../src/physics/constants.js';
+
+test('break: at full power the whole rack opens, not just the corner balls', () => {
+  for (const x of [0, 0.006, -0.011]) {
+    const s = rackForBreak();
+    s.balls[0].x = x;
+    const start = s.balls.map((b) => ({ x: b.x, z: b.z }));
+    const dz = s.balls[1].z - s.balls[0].z;
+    const dx = s.balls[1].x - s.balls[0].x;
+    const d = Math.sqrt(dx * dx + dz * dz);
+    strikeForBreak(s, { dirX: dx / d, dirZ: dz / d, speed: cueSpeed(1) });
+    const ev = [];
+    let n = 0;
+    while (!restForBreak(s) && n++ < 240 * 45) stepForBreak(s, ev);
+    let moved = 0;
+    for (let i = 1; i < 16; i++) {
+      const b = s.balls[i];
+      if (b.pocketed || Math.hypot(b.x - start[i].x, b.z - start[i].z) > 0.25) moved++;
+    }
+    assert(moved >= 11, `only ${moved} of 15 balls left the rack (cue x ${x})`);
+  }
+});
+
+test('break: the top of the power bar is stronger, the middle is unchanged', () => {
+  assert(Math.abs(cueSpeed(1) - 10.5) < 1e-9);
+  assert(Math.abs(cueSpeed(0.5) - (0.3 + 0.25 * 8.7)) < 0.01);
+  for (let p = 0; p < 1; p += 0.05) assert(cueSpeed(p + 0.05) > cueSpeed(p), 'not increasing');
+});

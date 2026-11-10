@@ -2,7 +2,7 @@
 // Busca tiros de tronera con la bola fantasma, los comprueba simulandolos y apunta con un pequeno error.
 // No toca la pantalla ni la partida real: recibe copias y devuelve decisiones.
 
-import { R, HALF_W, HALF_L } from '../physics/constants.js';
+import { R, HALF_W, HALF_L, cueSpeed } from '../physics/constants.js';
 import { POCKETS } from '../physics/table.js';
 import { simulateShot, isLegalCuePosition, findFreeSpot } from '../physics/simulate.js';
 import { groupOf, summarizeShot, applyShot, blackTarget } from '../rules/eightball.js';
@@ -88,7 +88,7 @@ function candidates(table, match, cx, cz) {
 // Resultado de un tiro sobre copias de la mesa y la partida.
 function outcome(table, match, shot) {
   const t = clone(table);
-  const speed = 0.3 + shot.power * shot.power * 8.7;
+  const speed = cueSpeed(shot.power);
   const { events } = simulateShot(t, { dirX: shot.dirX, dirZ: shot.dirZ, speed });
   const next = applyShot(match, summarizeShot(events));
   const me = match.turn;

@@ -1,5 +1,5 @@
 import { test, assert, assertClose } from './harness.js';
-import { R, HALF_W, HALF_L } from '../src/physics/constants.js';
+import { R, HALF_W, HALF_L, cueSpeed } from '../src/physics/constants.js';
 import { makeBall, strike, step, simulateShot, createRack } from '../src/physics/simulate.js';
 import { createGame } from '../src/game/match.js';
 import { newMatch } from '../src/rules/eightball.js';
@@ -141,7 +141,7 @@ test('ai: pots a straight ball into a corner', () => {
   m.players[0].group = 'solids';
   const shot = chooseShot(t, m, fixedRand);
   assertClose(shot.dirX * shot.dirX + shot.dirZ * shot.dirZ, 1, 1e-9, 'direction not unit');
-  const { events } = simulateShot(t, { dirX: shot.dirX, dirZ: shot.dirZ, speed: 0.3 + shot.power * shot.power * 8.7 });
+  const { events } = simulateShot(t, { dirX: shot.dirX, dirZ: shot.dirZ, speed: cueSpeed(shot.power) });
   assert(events.some((e) => e.type === 'pocket' && e.ball === 9), 'did not pot the 9');
   assert(!events.some((e) => e.type === 'pocket' && e.ball === 0), 'scratched');
 });
@@ -163,7 +163,7 @@ test('ai: with no pot available it still makes a legal contact', () => {
   m.players[1].group = 'stripes';
   m.players[0].group = 'solids';
   const shot = chooseShot(t, m, fixedRand);
-  const { events } = simulateShot(t, { dirX: shot.dirX, dirZ: shot.dirZ, speed: 0.3 + shot.power * shot.power * 8.7 });
+  const { events } = simulateShot(t, { dirX: shot.dirX, dirZ: shot.dirZ, speed: cueSpeed(shot.power) });
   const first = events.find((e) => e.type === 'ballBall' && (e.a === 0 || e.b === 0));
   assert(first && (first.a === 9 || first.b === 9), 'first contact was not its own ball');
 });
@@ -204,7 +204,7 @@ test('ai: aims the black only at the required pocket', () => {
   m.pocketed = [9, 10, 11, 12, 13, 14, 15];
   m.lastPocket = { solids: null, stripes: 3 }; // la negra debe ir a la 0, la esquina contraria
   const shot = chooseShot(t, m, fixedRand);
-  const { events } = simulateShot(t, { dirX: shot.dirX, dirZ: shot.dirZ, speed: 0.3 + shot.power * shot.power * 8.7 });
+  const { events } = simulateShot(t, { dirX: shot.dirX, dirZ: shot.dirZ, speed: cueSpeed(shot.power) });
   const into = events.find((e) => e.type === 'pocket' && e.ball === 8);
   assert(!into || into.pocket === 0, `black went into pocket ${into && into.pocket}`);
 });

@@ -196,6 +196,67 @@ function checkPockets(balls, events) {
   }
 }
 
+// Bolas a menos de eps de tocarse cuentan como un mismo grupo en un choque.
+export const CLUSTER = { eps: 2e-4, iters: 40 };
+// Choque dentro de un grupo de bolas en contacto (sobre todo el triangulo del saque): se resuelve
+// a la vez, no pareja a pareja. Pareja a pareja, casi toda la energia acababa en las dos bolas de
+// las esquinas de atras y el resto del triangulo apenas se movia. Con dos bolas da lo mismo que antes.
+// Metodo: impulsos acumulados con Jacobi relajado, solo de empuje, hasta alcanzar la restitucion.
+function resolveCluster(balls, ia, ib, events) {
+  const n = balls.length;
+  // Grupo: bolas unidas por contactos con la pareja que choca.
+  const inC = new Array(n).fill(false);
+  const stack = [ia, ib];
+  inC[ia] = inC[ib] = true;
+  const lim = (2 * R + CLUSTER.eps) * (2 * R + CLUSTER.eps);
+  while (stack.length) {
+    const i = stack.pop();
+    for (let j = 0; j < n; j++) {
+      if (inC[j] || balls[j].pocketed) continue;
+      const dx = balls[j].x - balls[i].x, dz = balls[j].z - balls[i].z;
+      if (dx * dx + dz * dz <= lim) { inC[j] = true; stack.push(j); }
+    }
+  }
+  const pairs = [];
+  for (let i = 0; i < n; i++) if (inC[i]) for (let j = i + 1; j < n; j++) if (inC[j]) {
+    const a = balls[i], b = balls[j];
+    let nx = b.x - a.x, nz = b.z - a.z;
+    const d2 = nx * nx + nz * nz;
+    if (d2 > lim) continue;
+    const d = Math.sqrt(d2);
+    pairs.push({ a, b, nx: nx / d, nz: nz / d, J: 0, target: null });
+  }
+  // Velocidad de separacion buscada en cada contacto: la de restitucion si se acercaban.
+  for (const p of pairs) {
+    const vrel = (p.b.vx - p.a.vx) * p.nx + (p.b.vz - p.a.vz) * p.nz;
+    p.target = vrel < 0 ? -E_BALL * vrel : 0;
+    p.v0 = vrel;
+  }
+  // Impulsos acumulados con Jacobi relajado: todos los contactos a la vez.
+  const deg = new Map();
+  for (const p of pairs) { deg.set(p.a, (deg.get(p.a) || 0) + 1); deg.set(p.b, (deg.get(p.b) || 0) + 1); }
+  for (let it = 0; it < CLUSTER.iters; it++) {
+    const dJ = pairs.map((p) => {
+      const vrel = (p.b.vx - p.a.vx) * p.nx + (p.b.vz - p.a.vz) * p.nz;
+      let d = 0.5 * (p.target - vrel); // impulso que falta (masa reducida 1/2)
+      const w = 1 / Math.max(deg.get(p.a), deg.get(p.b));
+      d *= w;
+      if (p.J + d < 0) d = -p.J; // los contactos solo empujan
+      return d;
+    });
+    let maxd = 0;
+    pairs.forEach((p, k) => {
+      const d = dJ[k];
+      p.J += d;
+      p.a.vx -= d * p.nx; p.a.vz -= d * p.nz;
+      p.b.vx += d * p.nx; p.b.vz += d * p.nz;
+      if (Math.abs(d) > maxd) maxd = Math.abs(d);
+    });
+    if (maxd < 1e-6) break;
+  }
+  for (const p of pairs) if (p.J > 1e-6 && p.v0 < 0) events.push({ type: 'ballBall', a: p.a.id, b: p.b.id, speed: -p.v0 });
+}
+
 // Avanza todas las bolas un paso DT con deteccion continua de colisiones.
 export function step(state, events) {
   const balls = state.balls;
@@ -271,22 +332,7 @@ export function step(state, events) {
     if (kind === 1) {
       const a = balls[ia];
       const b = balls[ib];
-      if (!a.pocketed && !b.pocketed) {
-        let nx = b.x - a.x;
-        let nz = b.z - a.z;
-        const d = Math.sqrt(nx * nx + nz * nz);
-        nx /= d;
-        nz /= d;
-        const vrel = (b.vx - a.vx) * nx + (b.vz - a.vz) * nz;
-        if (vrel < 0) {
-          const k = 0.5 * (1 + E_BALL) * vrel;
-          a.vx += k * nx;
-          a.vz += k * nz;
-          b.vx -= k * nx;
-          b.vz -= k * nz;
-          events.push({ type: 'ballBall', a: a.id, b: b.id, speed: -vrel });
-        }
-      }
+      if (!a.pocketed && !b.pocketed) resolveCluster(balls, ia, ib, events);
     } else if (kind === 2) {
       const a = balls[ia];
       const c = CUSHIONS[ib];
