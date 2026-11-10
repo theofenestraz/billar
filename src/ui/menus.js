@@ -4,6 +4,7 @@ const SCREENS = {
   // Portada: menu a la izquierda, la mesa se ve a la derecha.
   inicio: `
     <h1 class="title">Billiard Masters</h1>
+    <p class="byline">By Théo Fenestraz</p>
     <nav class="list">
       <button class="item" data-go="unjugador"><span>Un jugador</span></button>
       <button class="item" data-go="modo"><span>Multijugador</span></button>
