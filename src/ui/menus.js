@@ -1,7 +1,9 @@
 // Menus: inicio, pausa, como se juega, ajustes y fin de partida.
 
 // Version que ha cargado de verdad el navegador: la saca del ?v=N con que se importo este modulo.
-const VERSION = new URL(import.meta.url).searchParams.get('v') || 'local';
+// Se muestra con un decimal: la publicacion 22 es la 2.2, la 29 la 2.9 y la 30 pasa a 3.0.
+const RAW_VERSION = Number(new URL(import.meta.url).searchParams.get('v'));
+const VERSION = RAW_VERSION ? (RAW_VERSION / 10).toFixed(1) : 'local';
 const VERSION_LINE = `<p class="version">Versión ${VERSION}</p>`;
 
 const SCREENS = {

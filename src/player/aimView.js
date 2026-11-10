@@ -6,7 +6,7 @@ import { R, BED_Y, HALF_W, HALF_L } from '../physics/constants.js';
 const RAIL_TOP = 0.04 - R; // altura del borde de la banda sobre el centro de la bola
 const TIP_R = 0.009; // grosor del taco cerca de la punta
 import { predictAim } from '../physics/aim.js';
-import { makeCueTextures, CUE_PARTS } from '../render/textures.js?v=21';
+import { makeCueTextures, CUE_PARTS } from '../render/textures.js?v=22';
 
 const ARM = 0.62; // distancia de la camara a la blanca
 const PITCH_MIN = 0.14;
