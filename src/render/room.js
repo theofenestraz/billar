@@ -5,8 +5,8 @@ import * as THREE from 'three';
 import {
   makeNoiseTexture, makeBumpTexture, makeDartboardTexture, makePosterTexture, makeSignTexture,
   makeNeonRackTexture, makeWashTexture, makeCirclesPanelTexture, makePlasticTexture, makeSafetySignTexture,
-} from './textures.js?v=27';
-import { buildFoosball, buildShellChair, buildVendingMachine, buildHighTable, buildCafeSet } from './props.js?v=27';
+} from './textures.js?v=28';
+import { buildFoosball, buildShellChair, buildVendingMachine, buildHighTable, buildCafeSet } from './props.js?v=28';
 
 export const ROOM = {
   minX: -4.6, maxX: 7.3, minZ: -8.0, maxZ: 5.7, height: 3.0,
@@ -472,8 +472,9 @@ export function buildRoom() {
   block(2.7, 6.2, 0, 0.45, N, -7.5, tierMat, { collide: true });
   // A del sureste, sobre el futbolin.
   // Los dos pies a la misma profundidad y las cabezas juntas, para que formen la A.
-  leaningPillar(3.6, 2.4, 1.85, 1.0, 0.6);
-  leaningPillar(7.2, 2.4, -1.75, 1.0, 0.6);
+  // Abierta para que el futbolin quepa dentro: a la altura del tablero deja 1,68 m de hueco.
+  leaningPillar(3.3, 2.4, 2.15, 0.85, 0.6);
+  leaningPillar(7.2, 2.4, -1.75, 0.85, 0.6);
   // Pilar recto junto a la entrada, con el taco apoyado y la papelera.
   const P = { x: -3.05, z: 1.5, h: 0.4 };
   block(P.x - P.h, P.x + P.h, 0, H, P.z - P.h, P.z + P.h, concrete, { collide: true });
@@ -561,13 +562,14 @@ export function buildRoom() {
   cyl(0.16, 0.03, blackMat, E - 0.35, 0.015, -0.75, 16);
   panel(0.55, 0.8, std({ color: '#c3dc4a', roughness: 0.7, side: THREE.DoubleSide }), E - 0.37, 1.72, -0.75, 'w');
 
-  // Futbolin, bajo la A del sureste, por delante de los pilares. En su mismo plano no cabia: los
-  // pilares se juntan al subir y a la altura del tablero solo dejan 1,44 m, lo que mide el futbolin.
+  // Futbolin dentro de la A, al 90 % de su tamano: con patas mide 1,42 m de largo y deja unos
+  // 13 cm a cada lado hasta los pilares a la altura del tablero, donde el hueco es mas estrecho.
   const fb = buildFoosball();
-  fb.position.set(5.4, 0, 1.55);
-  fb.rotation.y = 0.12;
+  fb.scale.setScalar(0.9);
+  fb.position.set(5.33, 0, 2.4);
+  fb.rotation.y = 0.05;
   group.add(fb);
-  collide(4.6, 6.2, 0.95, 2.15);
+  collide(4.6, 6.06, 1.84, 2.96);
 
   // ---------- Techo: tuberias, carriles de focos y discos acusticos ----------
   const pipe = (x0, z0, x1, z1, r = 0.045) => {

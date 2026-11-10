@@ -5,7 +5,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { ROOM } from './room.js?v=27';
+import { ROOM } from './room.js?v=28';
 
 // Niveles de calidad. half: se apaga la mitad de los focos de relleno y se sube el resto.
 const LEVELS = {
@@ -46,7 +46,7 @@ export function setupLighting(renderer, scene, camera) {
     [5.4, -2.2, 7.3, -2.6, 30], // cartel
     [4.2, 4.3, 4.2, 5.2, 25], // banco de la cristalera
     [-1.8, 4.2, -2.4, 3.4, 28], // entrada
-    [5.2, 0.4, 5.4, 1.55, 22], // futbolin
+    [5.2, 1.0, 5.33, 2.4, 22], // futbolin
     [-2.2, 1.8, -3.0, 1.6, 20], // pilar con papelera
   ];
   const fillLights = [];
