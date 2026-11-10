@@ -2,25 +2,25 @@
 
 import * as THREE from 'three';
 import { DT, BED_Y, R } from './physics/constants.js';
-import { buildTable, TABLE_OUT_X, TABLE_OUT_Z } from './render/tableMesh.js?v=10';
-import { buildBalls } from './render/ballsMesh.js?v=10';
+import { buildTable, TABLE_OUT_X, TABLE_OUT_Z } from './render/tableMesh.js?v=11';
+import { buildBalls } from './render/ballsMesh.js?v=11';
 import { createGame } from './game/match.js';
 import { remaining } from './rules/eightball.js';
-import { createWalker } from './player/walk.js?v=10';
-import { createAimView } from './player/aimView.js?v=10';
-import { createDesktopInput } from './player/input.js?v=10';
-import { createHud } from './ui/hud.js?v=10';
-import { buildRoom } from './render/room.js?v=10';
-import { setupLighting } from './render/lighting.js?v=10';
-import { createTouchControls } from './player/touch.js?v=10';
-import { mergeStatic } from './render/props.js?v=10';
+import { createWalker } from './player/walk.js?v=11';
+import { createAimView } from './player/aimView.js?v=11';
+import { createDesktopInput } from './player/input.js?v=11';
+import { createHud } from './ui/hud.js?v=11';
+import { buildRoom } from './render/room.js?v=11';
+import { setupLighting } from './render/lighting.js?v=11';
+import { createTouchControls } from './player/touch.js?v=11';
+import { mergeStatic } from './render/props.js?v=11';
 import { chooseShot, choosePlacement } from './game/ai.js';
 import { soloRemaining } from './rules/solo.js';
 import { findFreeSpot } from './physics/simulate.js';
-import { createOnline } from './net/online.js?v=10';
-import { createMenus } from './ui/menus.js?v=10';
-import { loadSettings, saveSettings } from './ui/settings.js?v=10';
-import { createSound } from './audio/sound.js?v=10';
+import { createOnline } from './net/online.js?v=11';
+import { createMenus } from './ui/menus.js?v=11';
+import { loadSettings, saveSettings } from './ui/settings.js?v=11';
+import { createSound } from './audio/sound.js?v=11';
 
 const canvas = document.getElementById('view');
 const uiRoot = document.getElementById('ui');
@@ -200,7 +200,11 @@ function watchPerformance(dt) {
 const spin = { side: 0, top: 0 }; // efecto elegido por el jugador
 let lastState = game.state;
 let endTimer = 0;
-game.onEvent((e) => sound.handle(e));
+game.onEvent((e) => {
+  sound.handle(e);
+  if (e.type === 'pocket') balls.drop(e);
+});
+balls.onHit((speed) => sound.handle({ type: 'pocketHit', speed }));
 game.onChange(() => {
   if (game.state === 'rolling' && mode === 'aim') leaveAim();
   else if (mode === 'aim' && game.state !== lastState) startBlend();
@@ -714,7 +718,7 @@ function frame(now) {
     for (const b of game.table.balls) if (!b.pocketed) rolling += Math.sqrt(b.vx * b.vx + b.vz * b.vz);
   }
   sound.roll(rolling);
-  balls.sync(game.table);
+  balls.sync(game.table, paused ? 0 : dt);
   updateHud();
   lighting.render(game.state === 'rolling' || game.state === 'placing' || aimView.active);
 }
@@ -745,4 +749,4 @@ checkOrientation();
 openMenu('inicio');
 
 // Acceso para depurar desde la consola.
-window.__billar = { perf, merged, ai, net, pumpNet, settings, menus, pause, room, lighting, game, walker, aimView, camera, scene, renderer, get mode() { return mode; }, enterAim, leaveAim };
+window.__billar = { balls, perf, merged, ai, net, pumpNet, settings, menus, pause, room, lighting, game, walker, aimView, camera, scene, renderer, get mode() { return mode; }, enterAim, leaveAim };

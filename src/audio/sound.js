@@ -133,16 +133,21 @@ export function createSound() {
         burst(t, { type: 'lowpass', freq: 340, gain: 0.9 * a, dur: 0.07 });
         ping(t, { freq: 125, to: 70, gain: 0.45 * a, dur: 0.11 });
         burst(t, { type: 'bandpass', freq: 1300, q: 1.2, gain: 0.14 * a, dur: 0.012 });
+      } else if (e.type === 'pocketHit') {
+        // Golpe de la bola contra el fondo o las paredes de la tronera.
+        const t = voice(0.1);
+        if (t === null) return;
+        const a = level(e.speed, 3);
+        burst(t, { type: 'lowpass', freq: 520, gain: 0.7 * a, dur: 0.05 });
+        ping(t, { freq: 170, to: 95, gain: 0.4 * a, dur: 0.08 });
+        burst(t, { type: 'bandpass', freq: 1900, q: 1.4, gain: 0.18 * a, dur: 0.01 });
       } else if (e.type === 'pocket') {
         const t = voice(0.9);
         if (t === null) return;
-        // Caida en la tronera, un par de rebotes dentro y la bola rodando por el interior de la mesa.
+        // Entrada en la tronera y la bola rodando por el interior de la mesa.
         ping(t, { freq: 210, to: 80, gain: 0.6, dur: 0.14 });
         burst(t, { type: 'lowpass', freq: 700, gain: 0.55, dur: 0.07 });
-        for (const [dt, g] of [[0.09, 0.3], [0.16, 0.18], [0.21, 0.1]]) {
-          burst(t + dt, { type: 'bandpass', freq: 1700, q: 1.5, gain: g, dur: 0.012 });
-          ping(t + dt, { freq: 300, to: 180, gain: g * 0.7, dur: 0.04 });
-        }
+        // Los golpes dentro de la tronera suenan aparte, al ritmo de la animacion (pocketHit).
         burst(t + 0.2, { type: 'lowpass', freq: 210, gain: 0.34, dur: 0.65 });
       }
     },

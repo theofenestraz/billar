@@ -165,10 +165,13 @@ function bounceOff(b, nx, nz, events) {
 }
 
 function pocketBall(b, pocketId, events) {
+  // La velocidad de entrada viaja en el suceso: la usan el sonido y la animacion de la caida.
+  const vx = b.vx;
+  const vz = b.vz;
   b.pocketed = true;
   stopBall(b);
   b.wy = 0;
-  events.push({ type: 'pocket', ball: b.id, pocket: pocketId });
+  events.push({ type: 'pocket', ball: b.id, pocket: pocketId, x: b.x, z: b.z, vx, vz });
 }
 
 function checkPockets(balls, events) {
