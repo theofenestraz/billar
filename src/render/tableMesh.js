@@ -3,12 +3,13 @@
 import * as THREE from 'three';
 import { HALF_W, HALF_L, BED_Y, R } from '../physics/constants.js';
 import { POCKETS, CUSHIONS } from '../physics/table.js';
-import { makeNoiseTexture, makeBumpTexture, makeFeltTextures, makePocketLinerTexture } from './textures.js?v=17';
+import { makeNoiseTexture, makeBumpTexture, makeFeltTextures, makePocketLinerTexture } from './textures.js?v=18';
 
 const OUT_X = 0.685; // media anchura exterior (1,37 / 2)
 const OUT_Z = 1.18; // media longitud exterior (2,36 / 2)
 const TOP_Y = 0.8; // borde superior
 export const TABLE_TOP_Y = TOP_Y;
+export const POCKET_HOLE = 0.06; // radio del agujero del tapete en cada tronera
 const CUSHION_DEPTH = 0.05;
 const CAB_X = 0.655;
 const CAB_Z = 1.15;
@@ -83,7 +84,7 @@ function buildBed(mat) {
   shape.closePath();
   for (const p of POCKETS) {
     const h = new THREE.Path();
-    h.absarc(p.x, -p.z, 0.06, 0, Math.PI * 2, true);
+    h.absarc(p.x, -p.z, POCKET_HOLE, 0, Math.PI * 2, true);
     shape.holes.push(h);
   }
   const geo = new THREE.ShapeGeometry(shape, 24);
@@ -182,7 +183,11 @@ export function buildTable() {
     envMapIntensity: 0.1,
   });
   // Laca satinada: el brillo del foco sobre el marco queda como una franja suave, no un manchon blanco.
-  const black = new THREE.MeshPhysicalMaterial({ color: '#08080a', roughness: 0.42, clearcoat: 0.25, clearcoatRoughness: 0.45, envMapIntensity: 0.3 });
+  // Medido a la altura de los ojos junto a la mesa: con mas brillo, el foco de encima volvia el marco gris claro.
+  const black = new THREE.MeshPhysicalMaterial({
+    color: '#08080a', roughness: 0.65, specularIntensity: 0.2,
+    clearcoat: 0.1, clearcoatRoughness: 0.12, envMapIntensity: 0.3,
+  });
   const blackMatte = new THREE.MeshStandardMaterial({ color: '#0a0a0b', roughness: 0.75 });
   const alu = new THREE.MeshStandardMaterial({ color: '#b9bdc3', metalness: 1, roughness: 0.4 });
   const grey = new THREE.MeshStandardMaterial({ color: '#9a9da2', metalness: 0.35, roughness: 0.45, side: THREE.DoubleSide });
@@ -192,26 +197,19 @@ export function buildTable() {
   group.add(buildFrame(black));
   for (const c of CUSHIONS) group.add(buildCushion(c, cloth, c.len < 0.2 ? 0.022 : CUSHION_DEPTH));
 
-  // Interior de las troneras: copa de goma negra con costuras, que se oscurece hacia abajo,
-  // un labio redondeado en el borde y el fondo con la boca por donde se van las bolas.
+  // Interior de las troneras: copa de goma negra con costuras, que se oscurece hacia abajo, y el fondo
+  // con la boca por donde se van las bolas. Empieza justo en el borde del agujero del tapete (radio
+  // POCKET_HOLE), sin asomar por encima: por el lado exterior la pared la pone el propio marco.
   const liner = new THREE.MeshStandardMaterial({ map: makePocketLinerTexture(), roughness: 0.82, side: THREE.DoubleSide, envMapIntensity: 0.2 });
-  const lip = new THREE.MeshStandardMaterial({ color: '#141416', roughness: 0.45, envMapIntensity: 0.4 });
   const cup = new THREE.MeshStandardMaterial({ color: '#1a1a1c', roughness: 0.9 });
   for (const p of POCKETS) {
-    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.066, 0.06, 0.16, 32, 1, true), liner);
-    tube.position.set(p.x, BED_Y - 0.08 + 0.035, p.z);
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(POCKET_HOLE, POCKET_HOLE - 0.004, 0.14, 32, 1, true), liner);
+    tube.position.set(p.x, BED_Y - 0.0715, p.z); // de BED_Y - 0,1415 a BED_Y - 0,0015, bajo el tapete
     tube.receiveShadow = true;
     group.add(tube);
-    // Labio: medio toro por el lado exterior de la tronera, a ras del tapete.
-    const out = Math.atan2(p.z, p.x);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.064, 0.0045, 8, 28, Math.PI * 1.1), lip);
-    ring.rotation.x = -Math.PI / 2;
-    ring.rotation.z = -out - Math.PI * 0.55;
-    ring.position.set(p.x, BED_Y + 0.001, p.z);
-    group.add(ring);
     // Fondo en forma de cuenco y un hueco oscuro en el centro.
-    const bowl = new THREE.Mesh(new THREE.SphereGeometry(0.062, 24, 8, 0, Math.PI * 2, Math.PI * 0.62, Math.PI * 0.38), cup);
-    bowl.position.set(p.x, BED_Y - 0.098, p.z);
+    const bowl = new THREE.Mesh(new THREE.SphereGeometry(POCKET_HOLE - 0.004, 24, 8, 0, Math.PI * 2, Math.PI * 0.62, Math.PI * 0.38), cup);
+    bowl.position.set(p.x, BED_Y - 0.1, p.z);
     group.add(bowl);
     const hole = new THREE.Mesh(new THREE.CircleGeometry(0.03, 20), hollow);
     hole.rotation.x = -Math.PI / 2;

@@ -3,16 +3,16 @@
 import * as THREE from 'three';
 import { R, BED_Y } from '../physics/constants.js';
 import { POCKETS } from '../physics/table.js';
-import { makeBallTexture } from './textures.js?v=17';
-import { TRAY_Y, TRAY_Z } from './tableMesh.js?v=17';
+import { makeBallTexture } from './textures.js?v=18';
+import { TRAY_Y, TRAY_Z, POCKET_HOLE } from './tableMesh.js?v=18';
 
 const UP = new THREE.Vector3(0, 1, 0);
 
 // Caida dentro de la tronera. Solo es dibujo: las reglas ya cuentan la bola como embocada.
 const G = 9.81;
-const WALL_R = 0.066 - R; // el centro de la bola no pasa de aqui: pared del hueco de la tronera
-const HOLE_R = 0.06; // hueco del tapete
-const FLOOR_Y = BED_Y - 0.115 + R; // fondo visible de la tronera
+const WALL_R = POCKET_HOLE - R; // el centro de la bola no pasa de aqui: pared de la copa
+const HOLE_R = POCKET_HOLE; // hueco del tapete
+const FLOOR_Y = BED_Y - 0.12 + R; // fondo visible de la tronera
 const WALL_E = 0.45; // rebote contra el fondo de la tronera
 const MAX_DROP_TIME = 1.1;
 
