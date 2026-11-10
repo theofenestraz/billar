@@ -216,7 +216,9 @@ html, body {
   margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 2.4px; text-transform: uppercase; color: var(--accent);
 }
 .menu .title {
-  margin: 0 0 18px; font-size: clamp(54px, 9vw, 104px); line-height: 0.92; font-weight: 800;
+  /* Nunca mas ancho que la columna del menu: "MASTERS" mide unas 3,7 veces el tamano de letra. */
+  margin: 0 0 18px; font-size: min(clamp(54px, 9vw, 104px), calc((min(470px, 50vw) - max(28px, 6vw) - 24px) / 3.9));
+  line-height: 0.92; font-weight: 800;
   letter-spacing: -2px; text-transform: uppercase; font-stretch: condensed;
   text-shadow: 0 0 34px rgba(53, 224, 143, 0.35);
 }

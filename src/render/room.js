@@ -5,8 +5,8 @@ import * as THREE from 'three';
 import {
   makeNoiseTexture, makeBumpTexture, makeDartboardTexture, makePosterTexture, makeSignTexture,
   makeNeonRackTexture, makeWashTexture, makeCirclesPanelTexture, makePlasticTexture, makeSafetySignTexture,
-} from './textures.js?v=12';
-import { buildFoosball, buildShellChair, buildVendingMachine, buildHighTable, buildCafeSet } from './props.js?v=12';
+} from './textures.js?v=13';
+import { buildFoosball, buildShellChair, buildVendingMachine, buildHighTable, buildCafeSet } from './props.js?v=13';
 
 export const ROOM = {
   minX: -4.6, maxX: 7.3, minZ: -8.0, maxZ: 5.7, height: 3.0,
