@@ -116,3 +116,77 @@ html, body {
 .place.show { display: flex; align-items: center; gap: 14px; }
 .place-text { padding: 12px 16px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); }
 .hud[data-mode="aim"] .hint { bottom: auto; top: 86px; }
+
+/* ---------- Controles tactiles ---------- */
+.touch[hidden] { display: none; }
+.touch { position: absolute; inset: 0; pointer-events: none; }
+.touch .zone { position: absolute; top: 0; bottom: 0; width: 50%; pointer-events: auto; touch-action: none; }
+.touch .zone-move { left: 0; }
+.touch .zone-look { right: 0; }
+.touch[data-side="right"] .zone-move { left: auto; right: 0; }
+.touch[data-side="right"] .zone-look { right: auto; left: 0; }
+.stick {
+  position: fixed; width: 112px; height: 112px; margin: -56px 0 0 -56px; border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.28); background: rgba(255, 255, 255, 0.06);
+  opacity: 0; transition: opacity 0.12s; pointer-events: none;
+}
+.stick.on { opacity: 1; }
+.stick .nub {
+  position: absolute; left: 50%; top: 50%; width: 48px; height: 48px; margin: -24px 0 0 -24px;
+  border-radius: 50%; background: rgba(255, 255, 255, 0.55);
+}
+
+/* ---------- Menus ---------- */
+.menu[hidden] { display: none; }
+.menu {
+  position: absolute; inset: 0; display: grid; place-items: center; pointer-events: auto;
+  background: rgba(5, 6, 8, 0.62); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  padding: 16px; touch-action: pan-y;
+}
+.menu .card {
+  width: min(420px, 100%); max-height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  display: flex; flex-direction: column; gap: 10px; padding: 22px;
+  background: rgba(16, 17, 20, 0.94); border: 1px solid var(--line); border-radius: 18px;
+  -webkit-user-select: text; user-select: text;
+}
+.menu .card[data-screen="ayuda"] { width: min(560px, 100%); }
+.menu h1 { margin: 0; font-size: 34px; letter-spacing: -0.5px; }
+.menu h2 { margin: 0 0 4px; font-size: 24px; }
+.menu h3 { margin: 12px 0 2px; font-size: 14px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.6px; }
+.menu p { margin: 4px 0; line-height: 1.45; color: var(--dim); }
+.menu .sub { margin-bottom: 8px; }
+.menu label { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; font-weight: 600; }
+.menu input.name, .menu select {
+  font: inherit; color: var(--ink); background: rgba(255, 255, 255, 0.07); border: 1px solid var(--line);
+  border-radius: 10px; padding: 10px 12px; width: 58%; min-height: 44px;
+}
+.menu input[type="range"] { width: 58%; accent-color: var(--accent); }
+.menu label.check { justify-content: flex-start; font-weight: 500; }
+.menu input[type="checkbox"] { width: 22px; height: 22px; accent-color: var(--accent); }
+.menu .row { display: flex; gap: 10px; }
+.menu .row .btn { flex: 1; }
+.menu .btn { width: 100%; touch-action: manipulation; }
+.menu .form { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
+.menu .winner { font-size: 30px; color: var(--accent); }
+.menu .score-line { font-size: 18px; color: var(--ink); margin-bottom: 10px; }
+.menu[data-touch="1"] .only-desktop, .menu[data-touch="0"] .only-touch { display: none; }
+
+/* ---------- Aviso de orientacion ---------- */
+.rotate[hidden] { display: none; }
+.rotate {
+  position: absolute; inset: 0; display: grid; place-items: center; text-align: center; pointer-events: auto;
+  background: #0b0c0e; font-size: 20px; font-weight: 600; padding: 24px; z-index: 5;
+}
+
+/* En pantallas bajas (movil en horizontal) todo va mas compacto. */
+@media (max-height: 460px) {
+  .chip { min-width: 110px; padding: 5px 10px; }
+  .toast { top: 62px; }
+  .power { top: 57%; }
+  .power .track { width: 50px; height: 50vh; }
+  .power-label { display: none; }
+  .fine span { display: none; }
+  .hud[data-mode="aim"] .hint { display: none; }
+  .menu .card { padding: 14px; gap: 6px; }
+  .menu h1 { font-size: 24px; }
+}

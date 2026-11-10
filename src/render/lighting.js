@@ -42,11 +42,14 @@ export function setupLighting(renderer, scene, camera) {
     [5.2, 1.0, 5.4, 2.4, 22], // futbolin
     [-2.2, 1.8, -3.0, 1.6, 20], // pilar con papelera
   ];
+  const fillLights = [];
   for (const [x, z, tx, tz, power] of fills) {
     const s = new THREE.SpotLight('#ffe8c6', power, 9, 0.8, 0.85, 1.4);
     s.position.set(x, ROOM.height - 0.25, z);
     s.target.position.set(tx, 0.4, tz);
     scene.add(s, s.target);
+    s.userData.base = power;
+    fillLights.push(s);
   }
 
   // Luz de los neones.
@@ -100,6 +103,11 @@ export function setupLighting(renderer, scene, camera) {
     renderer.setSize(width, height);
     renderer.shadowMap.enabled = high;
     key.castShadow = high;
+    // En calidad baja se apaga la mitad de los focos y se sube el resto para compensar.
+    fillLights.forEach((l, i) => {
+      l.visible = high || i % 2 === 0;
+      l.intensity = l.userData.base * (high ? 1 : 1.6);
+    });
     scene.traverse((o) => { if (o.material) [].concat(o.material).forEach((m) => { m.needsUpdate = true; }); });
     if (composer) {
       composer.dispose();

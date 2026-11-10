@@ -12,6 +12,10 @@ import { createDesktopInput } from './player/input.js';
 import { createHud } from './ui/hud.js';
 import { buildRoom } from './render/room.js';
 import { setupLighting } from './render/lighting.js';
+import { createTouchControls } from './player/touch.js';
+import { createMenus } from './ui/menus.js';
+import { loadSettings, saveSettings } from './ui/settings.js';
+import { createSound } from './audio/sound.js';
 
 const canvas = document.getElementById('view');
 const uiRoot = document.getElementById('ui');
@@ -49,13 +53,19 @@ scene.add(balls.group);
 lighting.captureEnvironment([balls.group]);
 
 // ---------- Partida y jugador ----------
-const isTouch = matchMedia('(pointer: coarse)').matches;
+const settings = loadSettings();
+const coarse = matchMedia('(pointer: coarse)').matches;
+let isTouch = coarse;
+const sound = createSound();
 const game = createGame(['Jugador 1', 'Jugador 2']);
 const walker = createWalker(colliders, floors, { x: TABLE_OUT_X, z: TABLE_OUT_Z });
 const aimView = createAimView(scene, game);
 
+let acc = 0;
+let lastT = performance.now();
+let spaceCharge = false;
 let mode = 'walk'; // 'walk' | 'aim'
-let paused = false;
+let paused = true; // empieza en el menu de inicio
 const blend = { t: 1, pos: new THREE.Vector3(), quat: new THREE.Quaternion() };
 const BLEND_TIME = 0.6;
 
@@ -85,23 +95,84 @@ function leaveAim() {
 }
 
 let lastState = game.state;
+let endTimer = 0;
+game.onEvent((e) => sound.handle(e));
 game.onChange(() => {
   if (game.state === 'rolling' && mode === 'aim') leaveAim();
   else if (mode === 'aim' && game.state !== lastState) startBlend();
   if (lastState === 'rolling' && game.state !== 'rolling' && game.match.lastResult) hud.toast(game.match.lastResult.message);
+  if (game.state === 'over' && lastState !== 'over') {
+    // Deja ver el final del tiro antes de mostrar el resultado.
+    clearTimeout(endTimer);
+    endTimer = setTimeout(showEnd, 1400);
+  }
   lastState = game.state;
 });
 
+// ---------- Menus y pausa ----------
+function openMenu(name, data) {
+  paused = true;
+  spaceCharge = false;
+  input.unlock();
+  menus.show(name, data);
+  hud.setVisible(false);
+  touch.setActive(false);
+}
+
+function closeMenu() {
+  menus.hide();
+  hud.setVisible(true);
+  paused = false;
+  lastT = performance.now();
+  acc = 0;
+  if (!isTouch && mode === 'walk') input.lock();
+}
+
+function showEnd() {
+  if (game.state !== 'over') return;
+  if (mode === 'aim') leaveAim();
+  const m = game.match;
+  openMenu('fin', { winner: m.players[m.winner].name, players: m.players });
+}
+
+function pause() {
+  if (paused) return;
+  if (mode === 'aim') leaveAim();
+  openMenu('pausa');
+}
+
+function resetPlayer() {
+  if (mode === 'aim') {
+    aimView.exit();
+    mode = 'walk';
+  }
+  walker.setPosition(-0.5, 4.9, 0.1);
+  blend.t = 1;
+}
+
+function applySettings() {
+  isTouch = settings.controls === 'touch' || (settings.controls === 'auto' && coarse);
+  input.setOptions(settings);
+  touch.setOptions(settings);
+  aimView.setGuide(settings.guide);
+  sound.setVolume(settings.volume);
+  lighting.setQuality(settings.quality);
+  menuRoot.dataset.touch = isTouch ? '1' : '0';
+}
+
 // ---------- Entrada ----------
-let spaceCharge = false;
 const input = createDesktopInput(canvas, {
   onLook(dYaw, dPitch) {
     if (mode === 'walk' && !paused) walker.look(dYaw, dPitch);
   },
   onKeyDown(code) {
-    if (paused) return;
+    if (paused) {
+      if (code === 'Escape' && menus.screen === 'pausa') closeMenu();
+      return;
+    }
     if (mode === 'walk') {
       if (code === 'KeyE' || code === 'Enter') enterAim();
+      if (code === 'Escape' || code === 'KeyP') pause();
     } else if (game.state === 'placing') {
       if (code === 'Enter' || code === 'KeyE') confirmPlace();
       if (code === 'Escape' || code === 'KeyQ') leaveAim();
@@ -117,7 +188,11 @@ const input = createDesktopInput(canvas, {
     }
   },
   onWheel(sign) {
-    if (mode === 'aim' && game.state === 'aiming') aimView.rotate(-sign * 0.002);
+    if (!paused && mode === 'aim' && game.state === 'aiming') aimView.rotate(-sign * 0.002);
+  },
+  // El navegador suelta el raton con Esc: se trata como pausa.
+  onLockLost() {
+    if (!paused && mode === 'walk') pause();
   },
 });
 
@@ -127,21 +202,74 @@ function confirmPlace() {
 }
 
 function releaseShot() {
-  aimView.release();
+  const power = aimView.pull;
+  if (aimView.release()) pendingCue = power;
   hud.setPower(0);
 }
+let pendingCue = 0;
 
 const hud = createHud(uiRoot, {
   onAct: enterAim,
   onStand: leaveAim,
   onReplace: () => game.startPlacing(),
   onConfirm: confirmPlace,
-  onPause: () => {},
+  onPause: pause,
   onFine: (dir) => aimView.rotate(dir * 0.002),
   onPower: (p) => { aimView.setPull(p); hud.setPower(p); },
   onPowerRelease: releaseShot,
   onPowerCancel: () => { aimView.setPull(0); hud.setPower(0); },
 });
+
+const touch = createTouchControls(uiRoot, {
+  onLook(dYaw, dPitch) {
+    if (mode === 'walk' && !paused) walker.look(dYaw, dPitch);
+  },
+});
+
+const menuRoot = document.createElement('div');
+menuRoot.className = 'menu-root';
+uiRoot.appendChild(menuRoot);
+const menus = createMenus(menuRoot, settings, {
+  onStart(names) {
+    sound.unlock();
+    game.restart(names);
+    resetPlayer();
+    closeMenu();
+    hud.toast(`Saca ${names[0]}`);
+  },
+  onResume: closeMenu,
+  onRestart() {
+    clearTimeout(endTimer);
+    game.restart();
+    resetPlayer();
+    closeMenu();
+    hud.toast(`Saca ${game.match.players[0].name}`);
+  },
+  onRematch() {
+    game.rematch();
+    resetPlayer();
+    closeMenu();
+    hud.toast(`Saca ${game.match.players[game.match.turn].name}`);
+  },
+  onQuit() {
+    clearTimeout(endTimer);
+    openMenu('inicio');
+  },
+  onSettings(s) {
+    saveSettings(s);
+    applySettings();
+  },
+});
+
+// Aviso para girar el telefono.
+const rotateMsg = document.createElement('div');
+rotateMsg.className = 'rotate';
+rotateMsg.textContent = 'Gira el teléfono para jugar en horizontal';
+rotateMsg.hidden = true;
+uiRoot.appendChild(rotateMsg);
+function checkOrientation() {
+  rotateMsg.hidden = !(isTouch && innerHeight > innerWidth);
+}
 
 // Gestos sobre la imagen en modo apuntar: girar, inclinar y arrastrar la blanca.
 const raycaster = new THREE.Raycaster();
@@ -160,6 +288,7 @@ function dragCueTo(e) {
 
 canvas.addEventListener('pointerdown', (e) => {
   if (paused) return;
+  sound.unlock();
   if (mode === 'walk') {
     if (!isTouch && e.pointerType === 'mouse') input.lock();
     return;
@@ -207,9 +336,6 @@ function updateHud() {
   });
 }
 
-let acc = 0;
-let lastT = performance.now();
-
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min((now - lastT) / 1000, 0.1);
@@ -226,7 +352,7 @@ function frame(now) {
 
     if (mode === 'walk') {
       const mv = input.move();
-      walker.update(dt, mv.x, mv.z, mv.run);
+      walker.update(dt, mv.x + touch.move.x, mv.z + touch.move.z, mv.run);
     } else {
       if (game.state === 'aiming') {
         const slow = input.isDown('ShiftLeft', 'ShiftRight') ? 0.15 : 1;
@@ -239,7 +365,7 @@ function frame(now) {
           hud.setPower(aimView.pull);
         }
       }
-      aimView.update(dt);
+      aimView.update(dt, () => sound.cue(pendingCue));
     }
   }
 
@@ -254,6 +380,7 @@ function frame(now) {
     camera.quaternion.copy(pose.quaternion);
   }
 
+  touch.setActive(isTouch && mode === 'walk' && !paused);
   balls.sync(game.table);
   updateHud();
   lighting.render();
@@ -264,7 +391,22 @@ addEventListener('resize', () => {
   lighting.resize(innerWidth, innerHeight);
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
+  checkOrientation();
 });
 
+// Al volver de segundo plano la simulacion sigue donde estaba, sin saltos.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    if (!paused && game.state !== 'rolling') pause();
+  } else {
+    lastT = performance.now();
+    acc = 0;
+  }
+});
+
+applySettings();
+checkOrientation();
+openMenu('inicio');
+
 // Acceso para depurar desde la consola.
-window.__billar = { room, lighting, game, walker, aimView, camera, scene, renderer, get mode() { return mode; }, enterAim, leaveAim };
+window.__billar = { settings, menus, pause, room, lighting, game, walker, aimView, camera, scene, renderer, get mode() { return mode; }, enterAim, leaveAim };
