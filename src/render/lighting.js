@@ -5,7 +5,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { ROOM } from './room.js?v=15';
+import { ROOM } from './room.js?v=16';
 
 // Niveles de calidad. half: se apaga la mitad de los focos de relleno y se sube el resto.
 const LEVELS = {
@@ -89,7 +89,16 @@ export function setupLighting(renderer, scene, camera) {
   let composer = null;
   let bloom = null;
   let quality = 'alta';
+  let applied = false;
   let shadowAge = 999; // fotogramas desde la ultima sombra calculada
+  // Perfil movil: sin resplandor, sombra simple y a media frecuencia, cinco focos de relleno
+  // y resolucion que baja sola cuando un fotograma tarda demasiado.
+  let mobile = false;
+  const MOBILE_FILLS = [1, 2, 5, 8, 9]; // sillon, gradas, pared de la diana, entrada y futbolin
+  let resScale = 1;
+  const RES_MIN = 0.6;
+  const frameStats = { t: 0, n: 0, slowFor: 0, fastFor: 0 };
+  let shadowSkip = false;
   let width = 1;
   let height = 1;
 
@@ -107,10 +116,29 @@ export function setupLighting(renderer, scene, camera) {
     composer.addPass(new OutputPass());
   }
 
-  function apply() {
-    const cfg = LEVELS[quality];
-    renderer.setPixelRatio(Math.min(devicePixelRatio, cfg.pixelRatio));
+  const basePixelRatio = () => Math.min(devicePixelRatio, LEVELS[quality].pixelRatio);
+  function setPixelRatio() {
+    renderer.setPixelRatio(basePixelRatio() * (mobile ? resScale : 1));
     renderer.setSize(width, height);
+    if (composer) {
+      composer.setPixelRatio(renderer.getPixelRatio());
+      composer.setSize(width, height);
+    }
+  }
+
+  function apply() {
+    applied = true;
+    const cfg = { ...LEVELS[quality] };
+    if (mobile) {
+      cfg.bloom = false;
+      if (cfg.shadow) cfg.shadow = 1024;
+    }
+    renderer.shadowMap.type = mobile ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+    if (composer) {
+      composer.dispose();
+      composer = null;
+    }
+    setPixelRatio();
     renderer.shadowMap.enabled = cfg.shadow > 0;
     key.castShadow = cfg.shadow > 0;
     if (cfg.shadow && key.shadow.mapSize.x !== cfg.shadow) {
@@ -122,22 +150,63 @@ export function setupLighting(renderer, scene, camera) {
     }
     shadowAge = 999;
     fillLights.forEach((l, i) => {
-      l.visible = !cfg.half || i % 2 === 0;
-      l.intensity = l.userData.base * (cfg.half ? 1.6 : 1);
+      if (mobile) {
+        l.visible = MOBILE_FILLS.includes(i);
+        l.intensity = l.userData.base * 1.9;
+      } else {
+        l.visible = !cfg.half || i % 2 === 0;
+        l.intensity = l.userData.base * (cfg.half ? 1.6 : 1);
+      }
     });
     scene.traverse((o) => { if (o.material) [].concat(o.material).forEach((m) => { m.needsUpdate = true; }); });
-    if (composer) {
-      composer.dispose();
-      composer = null;
-    }
     if (cfg.bloom) buildComposer();
+  }
+
+  // Resolucion dinamica en movil: baja un paso si los fotogramas tardan, sube cuando sobra tiempo.
+  function adaptResolution(dt) {
+    if (!mobile || dt <= 0 || dt > 0.25) return;
+    frameStats.t += dt;
+    frameStats.n++;
+    if (frameStats.t < 1) return;
+    const avg = frameStats.t / frameStats.n;
+    frameStats.t = 0;
+    frameStats.n = 0;
+    if (avg > 0.0185) {
+      frameStats.slowFor++;
+      frameStats.fastFor = 0;
+    } else if (avg < 0.0172) {
+      frameStats.fastFor++;
+      frameStats.slowFor = 0;
+    } else {
+      frameStats.slowFor = 0;
+      frameStats.fastFor = 0;
+    }
+    let next = resScale;
+    if (frameStats.slowFor >= 1 && resScale > RES_MIN) next = Math.max(RES_MIN, resScale - 0.1);
+    else if (frameStats.fastFor >= 4 && resScale < 1) next = Math.min(1, resScale + 0.1);
+    if (next !== resScale) {
+      resScale = Math.round(next * 10) / 10;
+      frameStats.slowFor = 0;
+      frameStats.fastFor = 0;
+      setPixelRatio();
+    }
   }
 
   return {
     captureEnvironment,
     get quality() { return quality; },
+    get mobile() { return mobile; },
+    // Escala de resolucion actual (1 = completa). Solo cambia en movil.
+    get resScale() { return resScale; },
+    get resAtMinimum() { return !mobile || resScale <= RES_MIN; },
+    setMobile(on) {
+      if (mobile === on) return;
+      mobile = on;
+      resScale = 1;
+      if (applied) apply();
+    },
     setQuality(level) {
-      if (!LEVELS[level] || (level === quality && (composer || level === 'baja'))) return;
+      if (!LEVELS[level] || (level === quality && applied)) return;
       quality = level;
       apply();
     },
@@ -147,8 +216,14 @@ export function setupLighting(renderer, scene, camera) {
       apply();
     },
     // moving: hay algo moviendose sobre la mesa. Si no, la sombra se refresca de tarde en tarde.
-    render(moving = true) {
+    render(moving = true, dt = 0) {
+      adaptResolution(dt);
       shadowAge++;
+      // En movil, mientras algo se mueve la sombra se recalcula un fotograma si y otro no.
+      if (mobile && moving) {
+        shadowSkip = !shadowSkip;
+        if (shadowSkip) moving = false;
+      }
       if (moving || shadowAge > 40) {
         renderer.shadowMap.needsUpdate = true;
         shadowAge = 0;

@@ -2,26 +2,26 @@
 
 import * as THREE from 'three';
 import { DT, BED_Y, R } from './physics/constants.js';
-import { buildTable, TABLE_OUT_X, TABLE_OUT_Z, TABLE_TOP_Y } from './render/tableMesh.js?v=15';
-import { buildBalls } from './render/ballsMesh.js?v=15';
+import { buildTable, TABLE_OUT_X, TABLE_OUT_Z, TABLE_TOP_Y } from './render/tableMesh.js?v=16';
+import { buildBalls } from './render/ballsMesh.js?v=16';
 import { createGame } from './game/match.js';
 import { remaining, blackTarget } from './rules/eightball.js';
 import { POCKETS } from './physics/table.js';
-import { createWalker } from './player/walk.js?v=15';
-import { createAimView } from './player/aimView.js?v=15';
-import { createDesktopInput } from './player/input.js?v=15';
-import { createHud } from './ui/hud.js?v=15';
-import { buildRoom } from './render/room.js?v=15';
-import { setupLighting } from './render/lighting.js?v=15';
-import { createTouchControls } from './player/touch.js?v=15';
-import { mergeStatic } from './render/props.js?v=15';
+import { createWalker } from './player/walk.js?v=16';
+import { createAimView } from './player/aimView.js?v=16';
+import { createDesktopInput } from './player/input.js?v=16';
+import { createHud } from './ui/hud.js?v=16';
+import { buildRoom } from './render/room.js?v=16';
+import { setupLighting } from './render/lighting.js?v=16';
+import { createTouchControls } from './player/touch.js?v=16';
+import { mergeStatic } from './render/props.js?v=16';
 import { chooseShot, choosePlacement } from './game/ai.js';
 import { soloRemaining, soloBlackTarget } from './rules/solo.js';
 import { findFreeSpot } from './physics/simulate.js';
-import { createOnline } from './net/online.js?v=15';
-import { createMenus } from './ui/menus.js?v=15';
-import { loadSettings, saveSettings } from './ui/settings.js?v=15';
-import { createSound } from './audio/sound.js?v=15';
+import { createOnline } from './net/online.js?v=16';
+import { createMenus } from './ui/menus.js?v=16';
+import { loadSettings, saveSettings } from './ui/settings.js?v=16';
+import { createSound } from './audio/sound.js?v=16';
 
 const canvas = document.getElementById('view');
 const uiRoot = document.getElementById('ui');
@@ -51,6 +51,7 @@ const tableCollider = { minX: -TABLE_OUT_X, maxX: TABLE_OUT_X, minZ: -TABLE_OUT_
 const colliders = [tableCollider, ...room.colliders];
 const floors = room.floors;
 const lighting = setupLighting(renderer, scene, camera);
+lighting.setMobile(matchMedia('(pointer: coarse)').matches);
 lighting.resize(innerWidth, innerHeight);
 
 const tableGroup = buildTable();
@@ -223,7 +224,8 @@ function watchPerformance(dt) {
   perf.t = 0;
   perf.frames = 0;
   if (perf.skip > 0) { perf.skip--; return; } // tras un cambio, la primera medida no cuenta
-  perf.slow = fps < 42 ? perf.slow + 1 : 0;
+  // En movil primero baja la resolucion; la calidad solo baja si ya esta al minimo.
+  perf.slow = fps < 42 && lighting.resAtMinimum ? perf.slow + 1 : 0;
   if (perf.slow >= 2 && perf.level !== 'baja') {
     perf.level = perf.level === 'alta' ? 'media' : 'baja';
     perf.slow = 0;
@@ -713,7 +715,8 @@ function updateFps(dt) {
   fpsMeter.n++;
   fpsMeter.worst = Math.max(fpsMeter.worst, dt);
   if (fpsMeter.t >= 0.5) {
-    fpsBox.textContent = `${Math.round(fpsMeter.n / fpsMeter.t)} fps · peor ${Math.round(fpsMeter.worst * 1000)} ms · ${lighting.quality}`;
+    const res = lighting.mobile ? ` · móvil ${Math.round(lighting.resScale * 100)} %` : '';
+    fpsBox.textContent = `${Math.round(fpsMeter.n / fpsMeter.t)} fps · peor ${Math.round(fpsMeter.worst * 1000)} ms · ${lighting.quality}${res}`;
     fpsMeter.t = 0;
     fpsMeter.n = 0;
     fpsMeter.worst = 0;
@@ -790,7 +793,7 @@ function frame(now) {
   balls.sync(game.table, paused ? 0 : dt);
   updatePocketMark(now);
   updateHud();
-  lighting.render(game.state === 'rolling' || game.state === 'placing' || aimView.active);
+  lighting.render(game.state === 'rolling' || game.state === 'placing' || aimView.active, paused ? 0 : dt);
 }
 requestAnimationFrame(frame);
 
