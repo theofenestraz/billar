@@ -6,7 +6,7 @@ import { R, BED_Y, HALF_W, HALF_L } from '../physics/constants.js';
 const RAIL_TOP = 0.04 - R; // altura del borde de la banda sobre el centro de la bola
 const TIP_R = 0.009; // grosor del taco cerca de la punta
 import { predictAim } from '../physics/aim.js';
-import { makeCueTextures, CUE_PARTS } from '../render/textures.js?v=22';
+import { makeCueTextures, CUE_PARTS } from '../render/textures.js?v=23';
 
 const ARM = 0.62; // distancia de la camara a la blanca
 const PITCH_MIN = 0.14;
@@ -235,8 +235,22 @@ export function createAimView(scene, game) {
     cue.rotation.set(-tilt, yaw, 0, 'YXZ');
   }
 
+  // La camara no puede bajar del taco: va justo encima de su eje, asi que el angulo minimo es la
+  // inclinacion del taco mas un margen que deja fuera del plano cercano el grosor del palo.
+  // El margen (7 cm a la distancia de la camara) cubre el plano cercano de la camara y el radio del taco.
+  const CUE_MARGIN = 0.07;
+  function minPitch() {
+    const lift = Math.max(0, topUsed()) * 0.5 * R; // el efecto alto sube el taco
+    return Math.max(PITCH_MIN, tilt + (CUE_MARGIN + lift) / ARM);
+  }
+
   function writePose() {
     const cueBall = game.table.balls[0];
+    if (game.state !== 'placing') {
+      // Con el taco casi vertical el minimo puede pasar del maximo normal: manda el taco.
+      const lo = minPitch();
+      pitch = Math.min(Math.max(PITCH_MAX, lo), Math.max(pitch, lo));
+    }
     if (game.state === 'placing') {
       // Vista cenital, con el eje largo de la mesa en horizontal.
       tmp.position.set(0, BED_Y + 1.78, 0);
@@ -301,7 +315,7 @@ export function createAimView(scene, game) {
     // true si la blanca esta pegada a la banda y no se puede dar efecto.
     get noSpin() { return noSpinNow; },
     rotate(dAngle) { if (strikeT < 0) yaw += dAngle; },
-    tilt(dPitch) { pitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, pitch + dPitch)); },
+    tilt(dPitch) { const lo = minPitch(); pitch = Math.max(lo, Math.min(Math.max(PITCH_MAX, lo), pitch + dPitch)); },
     setPull(p) { if (strikeT < 0) pull = Math.max(0, Math.min(1, p)); },
     get pull() { return pull; },
 
