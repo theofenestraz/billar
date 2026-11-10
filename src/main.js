@@ -2,20 +2,20 @@
 
 import * as THREE from 'three';
 import { DT, BED_Y, R } from './physics/constants.js';
-import { buildTable, TABLE_OUT_X, TABLE_OUT_Z } from './render/tableMesh.js';
-import { buildBalls } from './render/ballsMesh.js';
+import { buildTable, TABLE_OUT_X, TABLE_OUT_Z } from './render/tableMesh.js?v=4';
+import { buildBalls } from './render/ballsMesh.js?v=4';
 import { createGame } from './game/match.js';
 import { remaining } from './rules/eightball.js';
-import { createWalker } from './player/walk.js';
-import { createAimView } from './player/aimView.js';
-import { createDesktopInput } from './player/input.js';
-import { createHud } from './ui/hud.js';
-import { buildRoom } from './render/room.js';
-import { setupLighting } from './render/lighting.js';
-import { createTouchControls } from './player/touch.js';
-import { createMenus } from './ui/menus.js';
-import { loadSettings, saveSettings } from './ui/settings.js';
-import { createSound } from './audio/sound.js';
+import { createWalker } from './player/walk.js?v=4';
+import { createAimView } from './player/aimView.js?v=4';
+import { createDesktopInput } from './player/input.js?v=4';
+import { createHud } from './ui/hud.js?v=4';
+import { buildRoom } from './render/room.js?v=4';
+import { setupLighting } from './render/lighting.js?v=4';
+import { createTouchControls } from './player/touch.js?v=4';
+import { createMenus } from './ui/menus.js?v=4';
+import { loadSettings, saveSettings } from './ui/settings.js?v=4';
+import { createSound } from './audio/sound.js?v=4';
 
 const canvas = document.getElementById('view');
 const uiRoot = document.getElementById('ui');
