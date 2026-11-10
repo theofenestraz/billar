@@ -121,6 +121,11 @@ html, body {
   background: radial-gradient(circle at 36% 30%, #ffffff 0%, #ece7da 42%, #b9b3a4 100%);
   border: 1px solid rgba(255, 255, 255, 0.5); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
 }
+.spin-ball.nodraw {
+  background:
+    linear-gradient(to bottom, transparent 50%, rgba(20, 20, 24, 0.55) 50%),
+    radial-gradient(circle at 36% 30%, #ffffff 0%, #ece7da 42%, #b9b3a4 100%);
+}
 .spin-ball::before, .spin-ball::after { content: ""; position: absolute; background: rgba(0, 0, 0, 0.16); }
 .spin-ball::before { left: 50%; top: 14%; bottom: 14%; width: 1px; }
 .spin-ball::after { top: 50%; left: 14%; right: 14%; height: 1px; }

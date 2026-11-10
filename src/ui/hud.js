@@ -81,9 +81,13 @@ export function createHud(root, handlers) {
   const spinDot = q('.spin-dot');
   let spinId = null;
   let spinTap = 0;
+  let shown = { side: 0, top: 0 };
+  let noDraw = false; // el taco va inclinado: la mitad de abajo no cuenta
   const showSpin = (side, top) => {
+    shown = { side, top };
+    const t = noDraw && top < 0 ? 0 : top;
     spinDot.style.left = `${50 + side * 36}%`;
-    spinDot.style.top = `${50 - top * 36}%`;
+    spinDot.style.top = `${50 - t * 36}%`;
   };
   const spinAt = (e) => {
     const r = spinBall.getBoundingClientRect();
@@ -178,6 +182,12 @@ export function createHud(root, handlers) {
       q('.aim').classList.toggle('show', vm.mode === 'aim' && vm.state === 'aiming');
       q('.replace').hidden = !vm.canPlace;
       q('.spin').hidden = !vm.spin;
+      if (noDraw !== !!vm.noDraw) {
+        noDraw = !!vm.noDraw;
+        spinBall.classList.toggle('nodraw', noDraw);
+        q('.spin-label').textContent = noDraw ? 'Sin efecto atrás' : 'Efecto';
+        showSpin(shown.side, shown.top);
+      }
       q('.place').classList.toggle('show', vm.mode === 'aim' && vm.state === 'placing');
       q('.place-text').textContent = vm.kitchen ? 'Arrastra la blanca dentro de la zona de saque' : 'Arrastra la blanca a donde quieras';
       q('.crosshair').classList.toggle('show', vm.mode === 'walk');

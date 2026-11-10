@@ -11,6 +11,10 @@ const PULL_MAX = 0.25; // retroceso maximo del taco
 const CUE_LEN = 1.45;
 const STRIKE_TIME = 0.07;
 const BALL_Y = BED_Y + R;
+const BASE_TILT = 0.09; // inclinacion normal del taco, para salvar la banda
+const MAX_TILT = 1.25; // con una bola pegada detras el taco casi se pone vertical
+const DRAW_LIMIT = 0.3; // por encima de esta inclinacion (unos 17 grados) ya no se puede picar por abajo
+const CUE_CLEAR = R + 0.014; // radio de la bola mas el grosor del taco a esa distancia, con margen
 
 function ribbon(mat) {
   const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
@@ -108,18 +112,65 @@ export function createAimView(scene, game) {
     }
   }
 
+  // Inclinacion que necesita el taco para pasar por encima de las bolas que hay detras de la blanca.
+  let tilt = BASE_TILT;
+  // aimY: altura del punto de la blanca al que apunta el taco, respecto a su centro.
+  function neededTilt(aimY) {
+    const cueBall = game.table.balls[0];
+    const d = dir();
+    let tan = Math.tan(BASE_TILT);
+    for (const b of game.table.balls) {
+      if (b.id === 0 || b.pocketed) continue;
+      const rx = b.x - cueBall.x;
+      const rz = b.z - cueBall.z;
+      const behind = -(rx * d.x + rz * d.z); // distancia detras de la blanca, en la linea del taco
+      if (behind <= R) continue;
+      const side = -rx * d.z + rz * d.x;
+      if (Math.abs(side) >= CUE_CLEAR) continue;
+      // El eje del taco tiene que ir por encima de la bola: altura necesaria a esa distancia.
+      const rise = Math.sqrt(CUE_CLEAR * CUE_CLEAR - side * side);
+      const need = (rise - aimY) / (behind - R);
+      if (need > tan) tan = need;
+    }
+    return Math.min(MAX_TILT, Math.atan(tan) + (tan > Math.tan(BASE_TILT) ? 0.03 : 0));
+  }
+  // Con el taco muy inclinado por una bola se golpea desde arriba: no cabe efecto hacia atras.
+  let blockedNow = false;
+  const blocked = () => blockedNow;
+  const topUsed = () => (blockedNow && spinTop < 0 ? 0 : spinTop);
+
   function updateCue() {
     const cueBall = game.table.balls[0];
     cue.visible = game.state === 'aiming' || strikeT >= 0;
     if (!cue.visible) return;
     const d = dir();
-    let back = R + 0.012 + pull * PULL_MAX;
-    if (strikeT >= 0) back = R + 0.002 + (strikeT / STRIKE_TIME) * strikePower * PULL_MAX;
-    // La punta se desplaza segun el efecto elegido: a la derecha (-dz, dx) y hacia arriba.
+    if (strikeT < 0) {
+      // Durante el golpe no cambia. Primero se prueba con el efecto elegido; si obliga a inclinar
+      // demasiado, se golpea desde arriba sin efecto hacia atras.
+      const off0 = 0.5 * R;
+      tilt = neededTilt(spinTop * off0);
+      blockedNow = spinTop < 0 ? tilt > DRAW_LIMIT : neededTilt(-off0) > DRAW_LIMIT;
+      if (blockedNow && spinTop < 0) tilt = neededTilt(0);
+    }
+    const cosT = Math.cos(tilt);
+    const sinT = Math.sin(tilt);
+    // Eje del taco hacia el mango: hacia atras y hacia arriba.
+    const ux = -d.x * cosT;
+    const uy = sinT;
+    const uz = -d.z * cosT;
+    // Punto de la blanca donde apunta el taco, desplazado segun el efecto: a la derecha (-dz, dx) y hacia arriba.
     const off = 0.5 * R;
-    cue.position.set(cueBall.x - d.x * back - d.z * spinSide * off, BALL_Y + spinTop * off, cueBall.z - d.z * back + d.x * spinSide * off);
-    // El mango se eleva unos grados para salvar la banda.
-    cue.rotation.set(-0.09, yaw, 0, 'YXZ');
+    const wx = -d.z * spinSide * off;
+    const wy = topUsed() * off;
+    const wz = d.x * spinSide * off;
+    // La punta queda donde ese eje sale de la bola, con un pequeno hueco.
+    const gap = strikeT >= 0 ? 0.002 : 0.012;
+    const bq = wx * ux + wy * uy + wz * uz;
+    const cq = wx * wx + wy * wy + wz * wz - (R + gap) * (R + gap);
+    let t = -bq + Math.sqrt(bq * bq - cq);
+    t += strikeT >= 0 ? (strikeT / STRIKE_TIME) * strikePower * PULL_MAX : pull * PULL_MAX;
+    cue.position.set(cueBall.x + wx + ux * t, BALL_Y + wy + uy * t, cueBall.z + wz + uz * t);
+    cue.rotation.set(-tilt, yaw, 0, 'YXZ');
   }
 
   function writePose() {
@@ -183,6 +234,8 @@ export function createAimView(scene, game) {
       spinTop = top * k;
     },
     get spin() { return { side: spinSide, top: spinTop }; },
+    // true si el taco va inclinado por una bola detras de la blanca.
+    get blocked() { return blocked(); },
     rotate(dAngle) { if (strikeT < 0) yaw += dAngle; },
     tilt(dPitch) { pitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, pitch + dPitch)); },
     setPull(p) { if (strikeT < 0) pull = Math.max(0, Math.min(1, p)); },
@@ -219,7 +272,7 @@ export function createAimView(scene, game) {
         strikeT -= dt;
         if (strikeT < 0) {
           const d = dir();
-          const ok = game.shoot(d.x, d.z, strikePower, spinSide, spinTop);
+          const ok = game.shoot(d.x, d.z, strikePower, spinSide, topUsed());
           if (ok && onStrike) onStrike(strikePower);
         }
       }

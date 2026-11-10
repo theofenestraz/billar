@@ -2,25 +2,25 @@
 
 import * as THREE from 'three';
 import { DT, BED_Y, R } from './physics/constants.js';
-import { buildTable, TABLE_OUT_X, TABLE_OUT_Z } from './render/tableMesh.js?v=9';
-import { buildBalls } from './render/ballsMesh.js?v=9';
+import { buildTable, TABLE_OUT_X, TABLE_OUT_Z } from './render/tableMesh.js?v=10';
+import { buildBalls } from './render/ballsMesh.js?v=10';
 import { createGame } from './game/match.js';
 import { remaining } from './rules/eightball.js';
-import { createWalker } from './player/walk.js?v=9';
-import { createAimView } from './player/aimView.js?v=9';
-import { createDesktopInput } from './player/input.js?v=9';
-import { createHud } from './ui/hud.js?v=9';
-import { buildRoom } from './render/room.js?v=9';
-import { setupLighting } from './render/lighting.js?v=9';
-import { createTouchControls } from './player/touch.js?v=9';
-import { mergeStatic } from './render/props.js?v=9';
+import { createWalker } from './player/walk.js?v=10';
+import { createAimView } from './player/aimView.js?v=10';
+import { createDesktopInput } from './player/input.js?v=10';
+import { createHud } from './ui/hud.js?v=10';
+import { buildRoom } from './render/room.js?v=10';
+import { setupLighting } from './render/lighting.js?v=10';
+import { createTouchControls } from './player/touch.js?v=10';
+import { mergeStatic } from './render/props.js?v=10';
 import { chooseShot, choosePlacement } from './game/ai.js';
 import { soloRemaining } from './rules/solo.js';
 import { findFreeSpot } from './physics/simulate.js';
-import { createOnline } from './net/online.js?v=9';
-import { createMenus } from './ui/menus.js?v=9';
-import { loadSettings, saveSettings } from './ui/settings.js?v=9';
-import { createSound } from './audio/sound.js?v=9';
+import { createOnline } from './net/online.js?v=10';
+import { createMenus } from './ui/menus.js?v=10';
+import { loadSettings, saveSettings } from './ui/settings.js?v=10';
+import { createSound } from './audio/sound.js?v=10';
 
 const canvas = document.getElementById('view');
 const uiRoot = document.getElementById('ui');
@@ -639,6 +639,7 @@ function updateHud() {
       ]
       : m.players.map((p, i) => ({ name: net.active && i === net.me ? `${p.name} (tú)` : p.name, group: p.group, left: remaining(m, i) })),
     spin: settings.spin,
+    noDraw: mode === 'aim' && aimView.blocked,
     canAct: canAct(),
     actLabel: game.state === 'placing' ? 'Colocar blanca' : 'Tirar',
     canPlace: game.canPlace() && myTurn() && !aiTurn(),
