@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { HALF_W, HALF_L, BED_Y, R } from '../physics/constants.js';
 import { POCKETS, CUSHIONS } from '../physics/table.js';
-import { makeNoiseTexture, makeBumpTexture, makeFeltTextures, makePocketLinerTexture } from './textures.js?v=18';
+import { makeNoiseTexture, makeBumpTexture, makeFeltTextures, makePocketLinerTexture } from './textures.js?v=19';
 
 const OUT_X = 0.685; // media anchura exterior (1,37 / 2)
 const OUT_Z = 1.18; // media longitud exterior (2,36 / 2)
@@ -99,11 +99,10 @@ function buildBed(mat) {
   return mesh;
 }
 
-// Perfil de banda extruido a lo largo de un segmento.
-function buildCushion(c, mat, depth) {
+// Normal de un segmento de banda hacia su cuerpo (el lado contrario al de juego).
+function bodyNormal(c) {
   const midX = (c.x1 + c.x2) / 2;
   const midZ = (c.z1 + c.z2) / 2;
-  // Normal hacia el cuerpo de la banda (lado contrario al de juego).
   let nx = c.nx;
   let nz = c.nz;
   let refX = 0;
@@ -126,24 +125,75 @@ function buildCushion(c, mat, depth) {
     nx = -nx;
     nz = -nz;
   }
-  const h = TOP_Y - BED_Y;
-  const profile = new THREE.Shape();
-  profile.moveTo(0, h * 0.72);
-  profile.lineTo(0, h);
-  profile.lineTo(depth, h);
-  profile.lineTo(depth, 0);
-  profile.lineTo(depth * 0.4, 0);
-  profile.closePath();
-  const geo = new THREE.ExtrudeGeometry(profile, { depth: c.len, bevelEnabled: false });
-  // Base: X = normal hacia fuera, Y = arriba, Z = tangente = X x Y.
-  const tx = -nz;
-  const tz = nx;
-  const startIsP1 = (c.x2 - c.x1) * tx + (c.z2 - c.z1) * tz > 0;
-  const sx = startIsP1 ? c.x1 : c.x2;
-  const sz = startIsP1 ? c.z1 : c.z2;
-  const m = new THREE.Matrix4().makeBasis(new THREE.Vector3(nx, 0, nz), new THREE.Vector3(0, 1, 0), new THREE.Vector3(tx, 0, tz));
-  m.setPosition(sx, BED_Y, sz);
-  geo.applyMatrix4(m);
+  return { nx, nz };
+}
+
+// Vector de inglete en un extremo: los perfiles de dos bandas que se juntan caen en la misma linea,
+// asi no queda hueco por fuera ni solape por dentro. Sin vecina, el corte es recto.
+function miterAt(x, z, self, n) {
+  for (const o of CUSHIONS) {
+    if (o === self) continue;
+    const shared = (Math.abs(o.x1 - x) < 1e-6 && Math.abs(o.z1 - z) < 1e-6) || (Math.abs(o.x2 - x) < 1e-6 && Math.abs(o.z2 - z) < 1e-6);
+    if (!shared) continue;
+    const m = bodyNormal(o);
+    const dot = n.nx * m.nx + n.nz * m.nz;
+    if (dot < -0.5) break; // casi opuestas: el inglete se iria muy lejos
+    const k = 1 / (1 + dot);
+    return { x: (n.nx + m.nx) * k, z: (n.nz + m.nz) * k };
+  }
+  return { x: n.nx, z: n.nz };
+}
+
+// Banda: el perfil (nariz inclinada hacia el tapete) recorre el segmento, con los extremos a inglete.
+function buildCushion(c, mat, depth) {
+  const n = bodyNormal(c);
+  // Un pelo por debajo del marco: si las dos caras de arriba coinciden, parpadean.
+  const h = TOP_Y - BED_Y - 0.0008;
+  // Perfil en (distancia hacia el cuerpo, altura sobre el tapete). Convexo.
+  const prof = [[0, h * 0.72], [0, h], [depth, h], [depth, 0], [depth * 0.4, 0]];
+  const ends = [
+    { x: c.x1, z: c.z1, m: miterAt(c.x1, c.z1, c, n) },
+    { x: c.x2, z: c.z2, m: miterAt(c.x2, c.z2, c, n) },
+  ];
+  const tx = c.tx;
+  const tz = c.tz;
+  const ring = ends.map((e) => prof.map(([o, y]) => {
+    const x = e.x + e.m.x * o;
+    const z = e.z + e.m.z * o;
+    // Coordenadas de textura en metros, como el tapete.
+    return { p: [x, BED_Y + y, z], uv: [x * tx + z * tz, o + y] };
+  }));
+  // Centro del cuerpo, para orientar cada cara hacia fuera.
+  const cx = (c.x1 + c.x2) / 2 + n.nx * depth * 0.5;
+  const cy = BED_Y + h * 0.5;
+  const cz = (c.z1 + c.z2) / 2 + n.nz * depth * 0.5;
+  const pos = [];
+  const uvs = [];
+  const tri = (a, b, d) => {
+    const ux = b.p[0] - a.p[0], uy = b.p[1] - a.p[1], uz = b.p[2] - a.p[2];
+    const vx = d.p[0] - a.p[0], vy = d.p[1] - a.p[1], vz = d.p[2] - a.p[2];
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const mx = (a.p[0] + b.p[0] + d.p[0]) / 3 - cx;
+    const my = (a.p[1] + b.p[1] + d.p[1]) / 3 - cy;
+    const mz = (a.p[2] + b.p[2] + d.p[2]) / 3 - cz;
+    const list = nx * mx + ny * my + nz * mz >= 0 ? [a, b, d] : [a, d, b];
+    for (const v of list) {
+      pos.push(...v.p);
+      uvs.push(...v.uv);
+    }
+  };
+  const k = prof.length;
+  for (let i = 0; i < k; i++) {
+    const a0 = ring[0][i], a1 = ring[0][(i + 1) % k];
+    const b0 = ring[1][i], b1 = ring[1][(i + 1) % k];
+    tri(a0, a1, b1);
+    tri(a0, b1, b0);
+  }
+  for (const r of ring) for (let i = 1; i < k - 1; i++) tri(r[0], r[i], r[i + 1]);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.computeVertexNormals();
   const mesh = new THREE.Mesh(geo, mat);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
@@ -195,7 +245,8 @@ export function buildTable() {
 
   group.add(buildBed(cloth));
   group.add(buildFrame(black));
-  for (const c of CUSHIONS) group.add(buildCushion(c, cloth, c.len < 0.2 ? 0.022 : CUSHION_DEPTH));
+  // Todas las bandas llegan hasta el marco, tambien las bocas: asi no quedan huecos entre banda y marco.
+  for (const c of CUSHIONS) group.add(buildCushion(c, cloth, CUSHION_DEPTH));
 
   // Interior de las troneras: copa de goma negra con costuras, que se oscurece hacia abajo, y el fondo
   // con la boca por donde se van las bolas. Empieza justo en el borde del agujero del tapete (radio
