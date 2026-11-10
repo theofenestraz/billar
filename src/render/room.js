@@ -5,8 +5,8 @@ import * as THREE from 'three';
 import {
   makeNoiseTexture, makeBumpTexture, makeDartboardTexture, makePosterTexture, makeSignTexture,
   makeNeonRackTexture, makeWashTexture, makeCirclesPanelTexture, makePlasticTexture, makeSafetySignTexture,
-} from './textures.js?v=8';
-import { buildFoosball, buildShellChair, buildVendingMachine, buildHighTable, buildCafeSet } from './props.js?v=8';
+} from './textures.js?v=9';
+import { buildFoosball, buildShellChair, buildVendingMachine, buildHighTable, buildCafeSet } from './props.js?v=9';
 
 export const ROOM = {
   minX: -4.6, maxX: 7.3, minZ: -8.0, maxZ: 5.7, height: 3.0,
@@ -22,7 +22,15 @@ export function buildRoom() {
 
   // ---------- Materiales ----------
   // Las superficies mate apenas reflejan el entorno, para que no pierdan color.
-  const std = (o) => new THREE.MeshStandardMaterial({ envMapIntensity: 0.15, ...o });
+  // Los materiales iguales se comparten, para que sus piezas puedan fundirse en una sola malla.
+  const cache = new Map();
+  const shared = (kind, o, make) => {
+    for (const v of Object.values(o)) if (v && typeof v === 'object') return make(); // con texturas no se comparte
+    const key = kind + JSON.stringify(o);
+    if (!cache.has(key)) cache.set(key, make());
+    return cache.get(key);
+  };
+  const std = (o) => shared('std', o, () => new THREE.MeshStandardMaterial({ envMapIntensity: 0.15, ...o }));
   const carpet = std({ map: makeNoiseTexture({ base: '#7b7c80', spread: 30, seed: 21, repeat: 10 }), bumpMap: makeBumpTexture({ seed: 9, repeat: 10 }), bumpScale: 0.6, roughness: 1 });
   const wallDark = std({ map: makeNoiseTexture({ base: '#4a4e52', spread: 8, seed: 3, repeat: 3 }), roughness: 0.95 });
   const wallGrey = std({ map: makeNoiseTexture({ base: '#63676b', spread: 8, seed: 4, repeat: 3 }), roughness: 0.95 });
@@ -52,12 +60,12 @@ export function buildRoom() {
   const red = std({ color: '#b3202a', roughness: 0.5 });
   const glass = new THREE.MeshPhysicalMaterial({ color: '#ffffff', transparent: true, opacity: 0.1, roughness: 0.03, metalness: 0, envMapIntensity: 0.7, depthWrite: false });
   // Material que emite luz. boost > 1 lo saca del rango normal para que el resplandor lo recoja.
-  const emissive = (color, boost = 1) => {
+  const emissive = (color, boost = 1) => shared('emi', { color, boost }, () => {
     const m = new THREE.MeshBasicMaterial({ color });
     m.color.multiplyScalar(boost);
     m.toneMapped = false;
     return m;
-  };
+  });
 
   // ---------- Ayudas ----------
   function block(x0, x1, y0, y1, z0, z1, mat, opts = {}) {
@@ -138,9 +146,9 @@ export function buildRoom() {
   const COR = { n: 2.6, s: S - 0.5, glassEnd: -10.4, end: -12.6, sill: 1.12, top: 2.45 };
   block(W - 0.2, W, 0, H, WIN.z1, COR.n, wallDark, { cast: false });
   collide(W - 0.2, W, N, COR.n);
-  block(COR.glassEnd, W, 0, COR.sill, COR.n - 0.2, COR.n, wallDark, { cast: false });
-  block(COR.glassEnd, W, COR.sill, COR.sill + 0.03, COR.n - 0.22, COR.n + 0.02, blackMat, { cast: false });
-  block(COR.glassEnd, W, COR.top, H, COR.n - 0.2, COR.n, wallDark, { cast: false });
+  block(COR.glassEnd, W - 0.2, 0, COR.sill, COR.n - 0.2, COR.n, wallDark, { cast: false });
+  block(COR.glassEnd, W - 0.2, COR.sill, COR.sill + 0.03, COR.n - 0.22, COR.n + 0.02, blackMat, { cast: false });
+  block(COR.glassEnd, W - 0.2, COR.top, H, COR.n - 0.2, COR.n, wallDark, { cast: false });
   block(COR.glassEnd - 0.45, COR.glassEnd, 0, H, COR.n - 0.25, COR.n + 0.03, std({ color: '#d9d5d0', roughness: 0.85 }), { cast: false });
   block(COR.end, COR.glassEnd - 0.45, 0, H, COR.n - 0.2, COR.n, wallDark, { cast: false });
   const pane2 = new THREE.Mesh(new THREE.PlaneGeometry(W - COR.glassEnd, COR.top - COR.sill), glass);
@@ -163,8 +171,8 @@ export function buildRoom() {
   const whiteRoom = emissive('#ece6e2');
   const BACK = W - 2.0;
   block(BACK - 0.1, BACK, 0.6, H, N, 2.4, whiteRoom, { cast: false });
-  block(BACK, W - 0.2, 0.7, 0.75, N, 2.4, emissive('#8f8a87'), { cast: false });
-  block(BACK, W - 0.2, H - 0.3, H - 0.25, N, 2.4, emissive('#a7a19e'), { cast: false });
+  block(BACK, W - 0.2, 0.7, 0.75, N, 2.35, emissive('#8f8a87'), { cast: false });
+  block(BACK, W - 0.2, H - 0.3, H - 0.25, N, 2.35, emissive('#a7a19e'), { cast: false });
   block(BACK, W - 0.2, 0.6, H, N - 0.05, N, whiteRoom, { cast: false });
   block(BACK, W - 0.2, 0.6, H, 2.35, 2.4, whiteRoom, { cast: false });
   const tubeColors = ['#fff6e8', '#ffd23c', '#ffb02e', '#ffe9ef', '#ff5aa8', '#ff8fd0', '#fff6e8', '#fff6e8', '#bfeaff', '#55d8ff'];
@@ -205,7 +213,7 @@ export function buildRoom() {
     block(X0, X1, 0.4, H, ZB - 0.1, ZB, dim, { cast: false });
     block(X0, X1, 0.5, 0.55, ZB, COR.n - 0.2, emissive('#5d5a5e'), { cast: false });
     block(X0, X1, 2.62, 2.67, ZB, COR.n - 0.2, emissive('#a39ea0'), { cast: false });
-    block(X0 - 0.05, X0, 0.5, H, ZB, COR.n - 0.2, dim, { cast: false });
+    block(X0 - 0.05, X0, 0.5, H, ZB, COR.n - 0.25, dim, { cast: false });
     const rackMat = new THREE.MeshBasicMaterial({ map: makeNeonRackTexture(), toneMapped: false });
     rackMat.color.multiplyScalar(1.7);
     panel(X1 - X0 - 0.1, 1.65, rackMat, (X0 + X1) / 2, 1.72, 1.2, 's');
@@ -264,7 +272,7 @@ export function buildRoom() {
   block(C1, C1 + 0.2, 0, H, S, S + 4.2, wallDark, { cast: false });
   block(C0 - 0.2, C1 + 0.2, 0, H, S + 4.2, S + 4.3, wallGrey, { cast: false });
   block(C0, C1, 2.25, H, S - 0.05, S + 0.05, wallDark, { cast: false });
-  block(C1, 0.55, 0, H, S - 0.05, S + 0.05, wallDark, { cast: false });
+  block(C1, 0.55, 0, H, S - 0.05, S, wallDark, { cast: false });
   panel(0.5, 0.17, new THREE.MeshBasicMaterial({ map: makeSignTexture({ text: 'SALIDA' }), toneMapped: false }), (C0 + C1) / 2, 2.42, S - 0.06, 'n');
   collide(C0 - 0.2, 0.6, S - 0.12, S + 0.3);
   // Pared curva del suroeste: sale de la salida, gira y sigue hacia el oeste como lado sur del pasillo.
@@ -354,10 +362,10 @@ export function buildRoom() {
   collide(E, 30, E_END - 0.2, E_END + 0.2);
   {
     // Sin luces reales tan lejos: materiales que ya llevan pintado su bano de luz.
-    const far = (color) => new THREE.MeshBasicMaterial({ color, toneMapped: false });
+    const far = (color) => shared('far', { color }, () => new THREE.MeshBasicMaterial({ color, toneMapped: false }));
     const wash = (o) => new THREE.MeshBasicMaterial({ map: makeWashTexture(o), toneMapped: false });
     // Tramo de pared con el panel de circulos envuelto en plastico y los cubos azules.
-    block(E, 9.25, 0, H, E_END - 0.2, E_END, wallDark, { cast: false });
+    block(E + 0.2, 9.25, 0, H, E_END - 0.2, E_END, wallDark, { cast: false });
     panel(1.7, 2.4, std({ map: makeCirclesPanelTexture(), roughness: 0.5 }), 8.35, 1.22, E_END + 0.03, 's');
     const wrap = panel(1.95, 2.55, new THREE.MeshPhysicalMaterial({
       map: makePlasticTexture(), color: '#ffffff', transparent: true, opacity: 0.55, roughness: 0.12, envMapIntensity: 1.2, depthWrite: false,
@@ -427,14 +435,15 @@ export function buildRoom() {
     { minX: S1[1], maxX: G1, minZ: T1 - 0.45, maxZ: T1, y: 0.52 }, { minX: S1[0], maxX: S1[1], minZ: T1 - 0.45, maxZ: T1, y: 0.32 });
   // Nivel 2, con hueco de paso.
   const S2 = [-2.5, -1.25];
-  block(G0, S2[0], 0, 0.92, N, T2, tierMat);
-  block(S2[1], G1, 0, 0.92, N, T2, tierMat);
+  // Cada nivel entra unos milimetros respecto al de abajo, para que sus costados no coincidan.
+  block(G0 + 0.004, S2[0], 0, 0.92, N, T2, tierMat);
+  block(S2[1], G1 - 0.004, 0, 0.92, N, T2, tierMat);
   block(S2[0], S2[1], 0, 0.92, N, T2 - 0.45, tierMat);
   block(S2[0], S2[1], 0, 0.72, T2 - 0.45, T2, tierMat);
   floors.push({ minX: G0, maxX: G1, minZ: N, maxZ: T2 - 0.45, y: 0.92 }, { minX: G0, maxX: S2[0], minZ: T2 - 0.45, maxZ: T2, y: 0.92 },
     { minX: S2[1], maxX: G1, minZ: T2 - 0.45, maxZ: T2, y: 0.92 }, { minX: S2[0], maxX: S2[1], minZ: T2 - 0.45, maxZ: T2, y: 0.72 });
   // Nivel 3: respaldo contra la pared, no pisable.
-  block(G0, 2.7, 0, 1.32, N, T3, tierMat, { collide: true });
+  block(G0 + 0.008, 2.7 - 0.004, 0, 1.32, N, T3, tierMat, { collide: true });
 
   // Neon verde de la pared norte.
   const n = ROOM.neon;

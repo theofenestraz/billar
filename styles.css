@@ -110,6 +110,24 @@ html, body {
   border-radius: 50%; background: #f2f0ea; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
 }
 .power .track.charging { border-color: var(--accent); }
+/* Selector de efecto: una bola con el punto donde pega el taco. */
+.spin {
+  position: absolute; right: calc(max(14px, env(safe-area-inset-right)) + 86px); bottom: max(18px, env(safe-area-inset-bottom));
+  display: flex; flex-direction: column; align-items: center; gap: 6px; color: var(--dim); font-size: 13px; pointer-events: auto;
+}
+.spin[hidden] { display: none; }
+.spin-ball {
+  position: relative; width: 74px; height: 74px; border-radius: 50%; cursor: pointer; touch-action: none;
+  background: radial-gradient(circle at 36% 30%, #ffffff 0%, #ece7da 42%, #b9b3a4 100%);
+  border: 1px solid rgba(255, 255, 255, 0.5); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+}
+.spin-ball::before, .spin-ball::after { content: ""; position: absolute; background: rgba(0, 0, 0, 0.16); }
+.spin-ball::before { left: 50%; top: 14%; bottom: 14%; width: 1px; }
+.spin-ball::after { top: 50%; left: 14%; right: 14%; height: 1px; }
+.spin-dot {
+  position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%;
+  background: #2d6fd0; border: 2px solid #ffffff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); z-index: 1;
+}
 .place {
   position: absolute; left: 50%; bottom: max(18px, env(safe-area-inset-bottom)); transform: translateX(-50%);
 }
@@ -247,6 +265,9 @@ html, body {
   .power { top: 57%; }
   .power .track { width: 50px; height: 50vh; }
   .power-label { display: none; }
+  .spin-label { display: none; }
+  .spin-ball { width: 60px; height: 60px; }
+  .spin { bottom: max(10px, env(safe-area-inset-bottom)); }
   .fine span { display: none; }
   .hud[data-mode="aim"] .hint { display: none; }
   .menu .card { padding: 14px; gap: 6px; }

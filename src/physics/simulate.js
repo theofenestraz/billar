@@ -85,7 +85,7 @@ export function isAtRest(state) {
 
 // ---------- Colisiones ----------
 
-import { E_BALL, E_CUSHION, HALF_W, HALF_L, MAX_STEPS } from './constants.js';
+import { E_BALL, E_CUSHION, HALF_W, HALF_L, MAX_STEPS, MU_CUSHION, MAX_TIP_OFFSET } from './constants.js';
 import { POCKETS, CUSHIONS } from './table.js';
 
 const MAX_HITS_PER_STEP = 64;
@@ -149,6 +149,18 @@ function bounceOff(b, nx, nz, events) {
   const k = (1 + E_CUSHION) * vn;
   b.vx -= k * nx;
   b.vz -= k * nz;
+  if (b.wy !== 0) {
+    // Efecto lateral: la banda agarra la bola y la desvia a lo largo de la tangente (-nz, nx).
+    // El punto de contacto se mueve a R * wy por el giro; el roce lo frena y consume parte del efecto.
+    const u = R * b.wy;
+    const grip = MU_CUSHION * -k;
+    const full = (2 / 7) * (u < 0 ? -u : u);
+    const mag = grip < full ? grip : full;
+    const f = u > 0 ? -mag : mag;
+    b.vx += f * -nz;
+    b.vz += f * nx;
+    b.wy += (2.5 * f) / R;
+  }
   events.push({ type: 'cushion', ball: b.id, speed: -vn });
 }
 
@@ -299,16 +311,25 @@ export function step(state, events) {
 // ---------- Triangulo, tiro y colocacion de la blanca ----------
 
 const RACK_ROWS = [[1], [9, 2], [3, 8, 10], [11, 4, 12, 5], [6, 13, 14, 7, 15]];
+const SOLO_ROWS = 4; // el modo en solitario usa las cuatro primeras filas: diez bolas
 const HEAD_Z = 0.495; // linea de cabecera
 const FOOT_Z = -0.495; // vertice del triangulo
 
-export function createRack() {
+// variant 'solo': triangulo de diez bolas. Las otras cinco quedan fuera de la partida (out).
+export function createRack(variant) {
   const balls = [];
   for (let i = 0; i < 16; i++) balls.push(makeBall(i, 0, 0));
   balls[0].z = HEAD_Z;
   const half = R + 0.5e-5; // media separacion entre centros
   const rowStep = half * Math.sqrt(3);
-  for (let row = 0; row < RACK_ROWS.length; row++) {
+  const rows = variant === 'solo' ? SOLO_ROWS : RACK_ROWS.length;
+  for (let row = rows; row < RACK_ROWS.length; row++) {
+    for (const id of RACK_ROWS[row]) {
+      balls[id].pocketed = true;
+      balls[id].out = true;
+    }
+  }
+  for (let row = 0; row < rows; row++) {
     const ids = RACK_ROWS[row];
     for (let j = 0; j < ids.length; j++) {
       const b = balls[ids[j]];
@@ -319,14 +340,25 @@ export function createRack() {
   return { balls };
 }
 
-// Golpea la blanca. shot = { dirX, dirZ, speed } con direccion unitaria.
+// Golpea la blanca. shot = { dirX, dirZ, speed, side, top } con direccion unitaria.
+// side y top dicen donde pega el taco, de -1 a 1: side > 0 a la derecha del centro, top > 0 por encima.
+// Un golpe a distancia r del centro da un giro (5 / (2 R^2)) * (r x v).
 export function strike(state, shot) {
   const cue = state.balls[0];
   cue.vx = shot.dirX * shot.speed;
   cue.vz = shot.dirZ * shot.speed;
-  cue.wx = 0;
-  cue.wy = 0;
-  cue.wz = 0;
+  let side = shot.side || 0;
+  let top = shot.top || 0;
+  const m2 = side * side + top * top;
+  if (m2 > 1) {
+    const m = Math.sqrt(m2);
+    side /= m;
+    top /= m;
+  }
+  const k = (2.5 * MAX_TIP_OFFSET * shot.speed) / R;
+  cue.wx = k * top * shot.dirZ;
+  cue.wz = -k * top * shot.dirX;
+  cue.wy = k * side;
 }
 
 // Detiene todo lo que siga en movimiento (limite de duracion alcanzado).

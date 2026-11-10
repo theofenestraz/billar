@@ -498,3 +498,60 @@ export function makeSafetySignTexture({ bg = '#c9302c', tall = true } = {}) {
   t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
   return t;
 }
+
+// Fieltro de la mesa: color con trama de fibras y su mapa de relieve. Una repeticion cubre 0,5 m.
+export function makeFeltTextures() {
+  const size = 512;
+  const rand = rng(1907);
+  const c = canvas(size, size);
+  const g = c.getContext('2d');
+  const b = canvas(size, size);
+  const gb = b.getContext('2d');
+  g.fillStyle = '#189a7c';
+  g.fillRect(0, 0, size, size);
+  gb.fillStyle = '#808080';
+  gb.fillRect(0, 0, size, size);
+  // Grano de base.
+  const img = g.getImageData(0, 0, size, size);
+  const bim = gb.getImageData(0, 0, size, size);
+  for (let i = 0; i < size * size; i++) {
+    const n = (rand() - 0.5) * 20;
+    img.data[i * 4] += n * 0.7;
+    img.data[i * 4 + 1] += n;
+    img.data[i * 4 + 2] += n * 0.8;
+    const h = 128 + (rand() - 0.5) * 70;
+    bim.data[i * 4] = bim.data[i * 4 + 1] = bim.data[i * 4 + 2] = h;
+  }
+  g.putImageData(img, 0, 0);
+  gb.putImageData(bim, 0, 0);
+  // Fibras cortas, peinadas mas o menos a lo largo de la mesa.
+  g.lineCap = 'round';
+  gb.lineCap = 'round';
+  for (let i = 0; i < 9000; i++) {
+    const x = rand() * size;
+    const y = rand() * size;
+    const a = Math.PI / 2 + (rand() - 0.5) * 1.1;
+    const len = 2 + rand() * 5;
+    const dx = Math.cos(a) * len;
+    const dy = Math.sin(a) * len;
+    const light = rand() > 0.5;
+    const alpha = 0.05 + rand() * 0.09;
+    g.strokeStyle = light ? `rgba(190,255,225,${alpha})` : `rgba(0,45,30,${alpha})`;
+    g.lineWidth = 0.6 + rand() * 0.7;
+    gb.strokeStyle = light ? `rgba(255,255,255,${alpha * 2.2})` : `rgba(0,0,0,${alpha * 2.2})`;
+    gb.lineWidth = g.lineWidth;
+    // Se dibuja tambien desplazada para que la textura repita sin costuras.
+    for (const ox of [0, -size, size]) for (const oy of [0, -size, size]) {
+      if (x + ox < -8 || x + ox > size + 8 || y + oy < -8 || y + oy > size + 8) continue;
+      g.beginPath();
+      g.moveTo(x + ox, y + oy);
+      g.lineTo(x + ox + dx, y + oy + dy);
+      g.stroke();
+      gb.beginPath();
+      gb.moveTo(x + ox, y + oy);
+      gb.lineTo(x + ox + dx, y + oy + dy);
+      gb.stroke();
+    }
+  }
+  return { map: toTexture(c, 2, 2), bump: toTexture(b, 2, 2, false) };
+}

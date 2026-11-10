@@ -5,14 +5,21 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { ROOM } from './room.js?v=8';
+import { ROOM } from './room.js?v=9';
 
-const MAX_PIXEL_RATIO = 2;
+// Niveles de calidad. half: se apaga la mitad de los focos de relleno y se sube el resto.
+const LEVELS = {
+  alta: { pixelRatio: 2, msaa: 4, bloom: true, shadow: 2048, half: false },
+  media: { pixelRatio: 1.5, msaa: 0, bloom: true, shadow: 1024, half: true },
+  baja: { pixelRatio: 1, msaa: 0, bloom: false, shadow: 0, half: true },
+};
 
 export function setupLighting(renderer, scene, camera) {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.0;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // La sombra solo se recalcula cuando algo se mueve sobre la mesa (ver render).
+  renderer.shadowMap.autoUpdate = false;
 
   scene.add(new THREE.HemisphereLight('#e4e6ea', '#9a9ba0', 3.8));
 
@@ -82,45 +89,55 @@ export function setupLighting(renderer, scene, camera) {
   let composer = null;
   let bloom = null;
   let quality = 'alta';
+  let shadowAge = 999; // fotogramas desde la ultima sombra calculada
   let width = 1;
   let height = 1;
 
   function buildComposer() {
     const pr = renderer.getPixelRatio();
-    const rt = new THREE.WebGLRenderTarget(width * pr, height * pr, { type: THREE.HalfFloatType, samples: 4 });
+    const cfg = LEVELS[quality];
+    const rt = new THREE.WebGLRenderTarget(width * pr, height * pr, { type: THREE.HalfFloatType, samples: cfg.msaa });
     composer = new EffectComposer(renderer, rt);
     composer.setPixelRatio(pr);
     composer.setSize(width, height);
     composer.addPass(new RenderPass(scene, camera));
-    bloom = new UnrealBloomPass(new THREE.Vector2(width, height), 0.4, 0.55, 3.2);
+    const k = cfg.msaa ? 1 : 0.5; // en calidad media el resplandor se calcula a media resolucion
+    bloom = new UnrealBloomPass(new THREE.Vector2(width * k, height * k), 0.4, 0.55, 3.2);
     composer.addPass(bloom);
     composer.addPass(new OutputPass());
   }
 
   function apply() {
-    const high = quality === 'alta';
-    renderer.setPixelRatio(high ? Math.min(devicePixelRatio, MAX_PIXEL_RATIO) : 1);
+    const cfg = LEVELS[quality];
+    renderer.setPixelRatio(Math.min(devicePixelRatio, cfg.pixelRatio));
     renderer.setSize(width, height);
-    renderer.shadowMap.enabled = high;
-    key.castShadow = high;
-    // En calidad baja se apaga la mitad de los focos y se sube el resto para compensar.
+    renderer.shadowMap.enabled = cfg.shadow > 0;
+    key.castShadow = cfg.shadow > 0;
+    if (cfg.shadow && key.shadow.mapSize.x !== cfg.shadow) {
+      key.shadow.mapSize.set(cfg.shadow, cfg.shadow);
+      if (key.shadow.map) {
+        key.shadow.map.dispose();
+        key.shadow.map = null;
+      }
+    }
+    shadowAge = 999;
     fillLights.forEach((l, i) => {
-      l.visible = high || i % 2 === 0;
-      l.intensity = l.userData.base * (high ? 1 : 1.6);
+      l.visible = !cfg.half || i % 2 === 0;
+      l.intensity = l.userData.base * (cfg.half ? 1.6 : 1);
     });
     scene.traverse((o) => { if (o.material) [].concat(o.material).forEach((m) => { m.needsUpdate = true; }); });
     if (composer) {
       composer.dispose();
       composer = null;
     }
-    if (high) buildComposer();
+    if (cfg.bloom) buildComposer();
   }
 
   return {
     captureEnvironment,
     get quality() { return quality; },
     setQuality(level) {
-      if (level === quality && (composer || level === 'baja')) return;
+      if (!LEVELS[level] || (level === quality && (composer || level === 'baja'))) return;
       quality = level;
       apply();
     },
@@ -129,7 +146,13 @@ export function setupLighting(renderer, scene, camera) {
       height = h;
       apply();
     },
-    render() {
+    // moving: hay algo moviendose sobre la mesa. Si no, la sombra se refresca de tarde en tarde.
+    render(moving = true) {
+      shadowAge++;
+      if (moving || shadowAge > 40) {
+        renderer.shadowMap.needsUpdate = true;
+        shadowAge = 0;
+      }
       if (composer) composer.render();
       else renderer.render(scene, camera);
     },

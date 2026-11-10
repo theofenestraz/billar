@@ -37,6 +37,10 @@ export function createAimView(scene, game) {
   let strikeT = -1; // cuenta atras del golpe en curso
   let strikePower = 0;
   let showGuide = true;
+  let showObject = true;
+  let spinSide = 0; // efecto: donde pega el taco, de -1 a 1
+  let spinTop = 0;
+  let auto = false; // tiro de la maquina: se ve el taco, sin guia ni camara
   const pose = { position: new THREE.Vector3(), quaternion: new THREE.Quaternion() };
   const tmp = new THREE.Camera(); // lookAt de camara: orienta -z hacia el objetivo
 
@@ -88,7 +92,7 @@ export function createAimView(scene, game) {
   function updateGuide() {
     const cueBall = game.table.balls[0];
     const placing = game.state === 'placing';
-    guide.visible = showGuide && game.state === 'aiming' && strikeT < 0;
+    guide.visible = showGuide && !auto && game.state === 'aiming' && strikeT < 0;
     placeRing.visible = placing;
     if (placing) placeRing.position.set(cueBall.x, BED_Y + 0.002, cueBall.z);
     if (!guide.visible) return;
@@ -96,7 +100,7 @@ export function createAimView(scene, game) {
     const a = predictAim(game.table, d.x, d.z);
     placeRibbon(pathLine, cueBall.x + d.x * R, cueBall.z + d.z * R, a.endX, a.endZ, 0.004);
     ghost.position.set(a.endX, BED_Y + 0.0015, a.endZ);
-    if (a.hitBall !== null) {
+    if (a.hitBall !== null && showObject) {
       const b = game.table.balls[a.hitBall];
       placeRibbon(objLine, b.x + a.objDirX * R, b.z + a.objDirZ * R, b.x + a.objDirX * (R + 0.25), b.z + a.objDirZ * (R + 0.25), 0.004);
     } else {
@@ -111,7 +115,9 @@ export function createAimView(scene, game) {
     const d = dir();
     let back = R + 0.012 + pull * PULL_MAX;
     if (strikeT >= 0) back = R + 0.002 + (strikeT / STRIKE_TIME) * strikePower * PULL_MAX;
-    cue.position.set(cueBall.x - d.x * back, BALL_Y, cueBall.z - d.z * back);
+    // La punta se desplaza segun el efecto elegido: a la derecha (-dz, dx) y hacia arriba.
+    const off = 0.5 * R;
+    cue.position.set(cueBall.x - d.x * back - d.z * spinSide * off, BALL_Y + spinTop * off, cueBall.z - d.z * back + d.x * spinSide * off);
     // El mango se eleva unos grados para salvar la banda.
     cue.rotation.set(-0.09, yaw, 0, 'YXZ');
   }
@@ -140,6 +146,7 @@ export function createAimView(scene, game) {
     get active() { return group.visible; },
     get striking() { return strikeT >= 0; },
     get yaw() { return yaw; },
+    get auto() { return auto; },
 
     // fromX, fromZ: donde esta el jugador, para apuntar desde su lado de la mesa.
     enter(fromX, fromZ) {
@@ -149,15 +156,33 @@ export function createAimView(scene, game) {
       pitch = 0.42;
       pull = 0;
       strikeT = -1;
+      auto = false;
       group.visible = true;
       writePose();
     },
+    // Muestra el taco apuntando en una direccion, para el tiro de la maquina.
+    enterAuto(dirX, dirZ) {
+      yaw = Math.atan2(-dirX, -dirZ);
+      pull = 0;
+      strikeT = -1;
+      auto = true;
+      group.visible = true;
+    },
     exit() {
       group.visible = false;
+      auto = false;
       pull = 0;
       strikeT = -1;
     },
-    setGuide(on) { showGuide = on; },
+    setGuide(on, objectOn = true) { showGuide = on; showObject = objectOn; },
+    // Efecto: limitado a un circulo de radio 1.
+    setSpin(side, top) {
+      const m = Math.hypot(side, top);
+      const k = m > 1 ? 1 / m : 1;
+      spinSide = side * k;
+      spinTop = top * k;
+    },
+    get spin() { return { side: spinSide, top: spinTop }; },
     rotate(dAngle) { if (strikeT < 0) yaw += dAngle; },
     tilt(dPitch) { pitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, pitch + dPitch)); },
     setPull(p) { if (strikeT < 0) pull = Math.max(0, Math.min(1, p)); },
@@ -194,7 +219,7 @@ export function createAimView(scene, game) {
         strikeT -= dt;
         if (strikeT < 0) {
           const d = dir();
-          const ok = game.shoot(d.x, d.z, strikePower);
+          const ok = game.shoot(d.x, d.z, strikePower, spinSide, spinTop);
           if (ok && onStrike) onStrike(strikePower);
         }
       }

@@ -2,21 +2,25 @@
 
 import * as THREE from 'three';
 import { DT, BED_Y, R } from './physics/constants.js';
-import { buildTable, TABLE_OUT_X, TABLE_OUT_Z } from './render/tableMesh.js?v=8';
-import { buildBalls } from './render/ballsMesh.js?v=8';
+import { buildTable, TABLE_OUT_X, TABLE_OUT_Z } from './render/tableMesh.js?v=9';
+import { buildBalls } from './render/ballsMesh.js?v=9';
 import { createGame } from './game/match.js';
 import { remaining } from './rules/eightball.js';
-import { createWalker } from './player/walk.js?v=8';
-import { createAimView } from './player/aimView.js?v=8';
-import { createDesktopInput } from './player/input.js?v=8';
-import { createHud } from './ui/hud.js?v=8';
-import { buildRoom } from './render/room.js?v=8';
-import { setupLighting } from './render/lighting.js?v=8';
-import { createTouchControls } from './player/touch.js?v=8';
-import { createOnline } from './net/online.js?v=8';
-import { createMenus } from './ui/menus.js?v=8';
-import { loadSettings, saveSettings } from './ui/settings.js?v=8';
-import { createSound } from './audio/sound.js?v=8';
+import { createWalker } from './player/walk.js?v=9';
+import { createAimView } from './player/aimView.js?v=9';
+import { createDesktopInput } from './player/input.js?v=9';
+import { createHud } from './ui/hud.js?v=9';
+import { buildRoom } from './render/room.js?v=9';
+import { setupLighting } from './render/lighting.js?v=9';
+import { createTouchControls } from './player/touch.js?v=9';
+import { mergeStatic } from './render/props.js?v=9';
+import { chooseShot, choosePlacement } from './game/ai.js';
+import { soloRemaining } from './rules/solo.js';
+import { findFreeSpot } from './physics/simulate.js';
+import { createOnline } from './net/online.js?v=9';
+import { createMenus } from './ui/menus.js?v=9';
+import { loadSettings, saveSettings } from './ui/settings.js?v=9';
+import { createSound } from './audio/sound.js?v=9';
 
 const canvas = document.getElementById('view');
 const uiRoot = document.getElementById('ui');
@@ -48,7 +52,10 @@ const floors = room.floors;
 const lighting = setupLighting(renderer, scene, camera);
 lighting.resize(innerWidth, innerHeight);
 
-scene.add(buildTable());
+const tableGroup = buildTable();
+scene.add(tableGroup);
+// Sala y mesa no se mueven: se funden por material para dibujarlas en muchas menos llamadas.
+const merged = { room: mergeStatic(room.group), table: mergeStatic(tableGroup) };
 const balls = buildBalls();
 scene.add(balls.group);
 lighting.captureEnvironment([balls.group]);
@@ -85,7 +92,7 @@ const say = (msg) => { if (net.link) net.link.send(msg); };
 
 // Las acciones propias se envian al rival; las del rival no se pueden hacer desde aqui.
 for (const [fn, build] of [
-  ['shoot', (a) => ({ t: 'shot', dx: a[0], dz: a[1], p: a[2] })],
+  ['shoot', (a) => ({ t: 'shot', dx: a[0], dz: a[1], p: a[2], a: a[3] || 0, b: a[4] || 0 })],
   ['placeCue', (a) => ({ t: 'confirm', x: a[0], z: a[1] })],
   ['startPlacing', () => ({ t: 'replace' })],
 ]) {
@@ -104,11 +111,53 @@ for (const [fn, build] of [
   };
 }
 
-const canAct = () => (game.state === 'aiming' || game.state === 'placing') && myTurn() && walker.distanceToTable() < 1.5;
+// ---------- Maquina ----------
+// vsAi: partida contra la maquina, que es siempre el jugador 1.
+const ai = { on: false, stage: 'idle', t: 0, shot: null };
+const aiTurn = () => ai.on && game.match.turn === 1 && game.match.phase !== 'over';
+
+function driveAi(dt) {
+  if (!aiTurn() || (game.state !== 'aiming' && game.state !== 'placing')) {
+    if (ai.stage !== 'idle' && game.state !== 'aiming') {
+      ai.stage = 'idle';
+      ai.t = 0;
+    }
+    if (aimView.auto && !aimView.striking && game.state !== 'aiming') aimView.exit();
+    return;
+  }
+  ai.t += dt;
+  if (ai.stage === 'idle' && ai.t > 1.0) {
+    if (game.state === 'placing') {
+      const s = choosePlacement(game.table, game.match);
+      if (!game.placeCue(s.x, s.z)) {
+        const f = findFreeSpot(game.table, 0, 0.6, game.match.ballInHand === 'kitchen');
+        game.placeCue(f.x, f.z);
+      }
+    }
+    ai.stage = 'think';
+    ai.t = 0;
+  } else if (ai.stage === 'think' && ai.t > 0.5 && game.state === 'aiming') {
+    ai.shot = chooseShot(game.table, game.match);
+    aimView.setSpin(0, 0);
+    aimView.enterAuto(ai.shot.dirX, ai.shot.dirZ);
+    ai.stage = 'pull';
+    ai.t = 0;
+  } else if (ai.stage === 'pull') {
+    aimView.setPull(ai.shot.power * Math.min(1, ai.t / 0.9));
+    if (ai.t > 1.15) {
+      pendingCue = ai.shot.power;
+      aimView.release();
+      ai.stage = 'fired';
+    }
+  }
+}
+
+const canAct = () => (game.state === 'aiming' || game.state === 'placing') && myTurn() && !aiTurn() && walker.distanceToTable() < 1.5;
 
 function enterAim() {
   if (mode !== 'walk' || paused || !canAct()) return;
   aimView.enter(walker.x, walker.z);
+  aimView.setSpin(settings.spin ? spin.side : 0, settings.spin ? spin.top : 0);
   mode = 'aim';
   startBlend();
   input.unlock();
@@ -123,13 +172,39 @@ function leaveAim() {
   if (!isTouch) input.lock();
 }
 
+// Calidad automatica: empieza segun el dispositivo y baja un nivel si la imagen va a tirones.
+const perf = { level: coarse ? 'media' : 'alta', t: 0, frames: 0, slow: 0, skip: 1 };
+try {
+  const saved = localStorage.getItem('billar.calidad');
+  if (['alta', 'media', 'baja'].includes(saved)) perf.level = saved;
+} catch (e) { /* sin almacenamiento */ }
+function watchPerformance(dt) {
+  if (settings.quality !== 'auto' || document.hidden || dt >= 0.1) return;
+  perf.t += dt;
+  perf.frames++;
+  if (perf.t < 2.5) return;
+  const fps = perf.frames / perf.t;
+  perf.t = 0;
+  perf.frames = 0;
+  if (perf.skip > 0) { perf.skip--; return; } // tras un cambio, la primera medida no cuenta
+  perf.slow = fps < 42 ? perf.slow + 1 : 0;
+  if (perf.slow >= 2 && perf.level !== 'baja') {
+    perf.level = perf.level === 'alta' ? 'media' : 'baja';
+    perf.slow = 0;
+    perf.skip = 1;
+    try { localStorage.setItem('billar.calidad', perf.level); } catch (e) { /* sin almacenamiento */ }
+    lighting.setQuality(perf.level);
+  }
+}
+
+const spin = { side: 0, top: 0 }; // efecto elegido por el jugador
 let lastState = game.state;
 let endTimer = 0;
 game.onEvent((e) => sound.handle(e));
 game.onChange(() => {
   if (game.state === 'rolling' && mode === 'aim') leaveAim();
   else if (mode === 'aim' && game.state !== lastState) startBlend();
-  if (lastState === 'rolling' && game.state !== 'rolling' && game.match.lastResult) hud.toast(game.match.lastResult.message);
+  if (lastState === 'rolling' && game.state !== 'rolling' && game.match.lastResult && game.match.lastResult.message) hud.toast(game.match.lastResult.message);
   // Quien ha tirado envia como ha quedado todo, por si los dos dispositivos difieren en algo.
   if (lastState === 'rolling' && game.state !== 'rolling' && net.active && net.shooter) {
     net.shooter = false;
@@ -167,7 +242,7 @@ function startOnline(names) {
   net.shots = 0;
   net.shooter = false;
   sound.unlock();
-  game.restart(names);
+  game.restart(names, 'duel');
   resetPlayer();
   startBlend();
   closeMenu();
@@ -260,7 +335,7 @@ function applyRemote(m) {
       if (net.active && !myTurn()) game.startPlacing();
       break;
     case 'shot':
-      if (net.active && !myTurn() && game.shoot(m.dx, m.dz, m.p)) sound.cue(m.p);
+      if (net.active && !myTurn() && game.shoot(m.dx, m.dz, m.p, m.a || 0, m.b || 0)) sound.cue(m.p);
       break;
     case 'state':
       // Vale si es al menos tan reciente como lo que hay aqui. Tambien recupera un tiro que se haya perdido.
@@ -309,6 +384,15 @@ function showEnd() {
   if (game.state !== 'over') return;
   if (mode === 'aim') leaveAim();
   const m = game.match;
+  if (m.mode === 'solo') {
+    const best = m.best ? ` Tu mejor marca: ${m.best} tiros.` : '';
+    openMenu('fin', {
+      title: m.winner === 0 ? 'Completado' : 'Has perdido',
+      line: (m.winner === 0 ? `Lo has hecho en ${m.shots} tiros.` : m.lastResult.message + '.') + best,
+      again: 'Otra vez',
+    });
+    return;
+  }
   openMenu('fin', { winner: m.players[m.winner].name, players: m.players });
 }
 
@@ -331,9 +415,10 @@ function applySettings() {
   isTouch = settings.controls === 'touch' || (settings.controls === 'auto' && coarse);
   input.setOptions(settings);
   touch.setOptions(settings);
-  aimView.setGuide(settings.guide);
+  aimView.setGuide(settings.guide, settings.guideObject);
+  if (!settings.spin) aimView.setSpin(0, 0);
   sound.setVolume(settings.volume);
-  lighting.setQuality(settings.quality);
+  lighting.setQuality(settings.quality === 'auto' ? perf.level : settings.quality);
   menuRoot.dataset.touch = isTouch ? '1' : '0';
 }
 
@@ -395,6 +480,7 @@ const hud = createHud(uiRoot, {
   onPower: (p) => { aimView.setPull(p); hud.setPower(p); },
   onPowerRelease: releaseShot,
   onPowerCancel: () => { aimView.setPull(0); hud.setPower(0); },
+  onSpin: (side, top) => { spin.side = side; spin.top = top; if (mode === 'aim') aimView.setSpin(side, top); },
 });
 
 const touch = createTouchControls(uiRoot, {
@@ -408,18 +494,43 @@ menuRoot.className = 'menu-root';
 uiRoot.appendChild(menuRoot);
 const menus = createMenus(menuRoot, settings, {
   onHost(name) {
+    ai.on = false;
     net.name = name;
     openLink().host();
   },
   onJoin(name, code) {
+    ai.on = false;
     net.name = name;
     openLink().join(code);
   },
   onOnlineCancel: endOnline,
+  onVsAi(name) {
+    endOnline();
+    ai.on = true;
+    ai.stage = 'idle';
+    ai.t = 0;
+    sound.unlock();
+    game.restart([name, name === 'Máquina' ? 'Máquina 2' : 'Máquina'], 'duel');
+    resetPlayer();
+    startBlend();
+    closeMenu();
+    hud.toast('Sacas tú');
+  },
+  onSolo(name) {
+    endOnline();
+    ai.on = false;
+    sound.unlock();
+    game.restart([name], 'solo');
+    resetPlayer();
+    startBlend();
+    closeMenu();
+    hud.toast('Mete las nueve de color y la negra al final', 4200);
+  },
   onStart(names) {
     endOnline();
+    ai.on = false;
     sound.unlock();
-    game.restart(names);
+    game.restart(names, 'duel');
     resetPlayer();
     startBlend(); // la camara baja desde la vista de portada hasta el jugador
     closeMenu();
@@ -432,18 +543,20 @@ const menus = createMenus(menuRoot, settings, {
     game.restart();
     resetPlayer();
     closeMenu();
-    hud.toast(`Saca ${game.match.players[0].name}`);
+    if (game.match.mode !== 'solo') hud.toast(`Saca ${game.match.players[0].name}`);
   },
   onRematch() {
     if (net.active) { say({ t: 'rematch' }); net.shots = 0; }
     game.rematch();
     resetPlayer();
     closeMenu();
-    hud.toast(`Saca ${game.match.players[game.match.turn].name}`);
+    if (game.match.mode !== 'solo') hud.toast(`Saca ${game.match.players[game.match.turn].name}`);
   },
   onQuit() {
     clearTimeout(endTimer);
     endOnline();
+    ai.on = false;
+    if (aimView.auto) aimView.exit();
     openMenu('inicio');
   },
   onSettings(s) {
@@ -512,17 +625,23 @@ function updateHud() {
   let hint = '';
   if (mode === 'walk' && !isTouch && !input.locked) hint = 'Haz clic para mirar alrededor';
   else if (mode === 'aim' && game.state === 'aiming' && !isTouch) hint = 'Arrastra para apuntar · Espacio o la barra para dar fuerza';
-  if (net.active && !myTurn() && (game.state === 'aiming' || game.state === 'placing')) hint = `Turno de ${m.players[m.turn].name}. Espera su tiro`;
+  if ((aiTurn() || (net.active && !myTurn())) && (game.state === 'aiming' || game.state === 'placing')) hint = `Turno de ${m.players[m.turn].name}. Espera su tiro`;
   hud.update({
     mode,
     touch: isTouch,
     state: game.state,
     turn: m.turn,
     over: m.phase === 'over',
-    players: m.players.map((p, i) => ({ name: net.active && i === net.me ? `${p.name} (tú)` : p.name, group: p.group, left: remaining(m, i) })),
+    players: m.mode === 'solo'
+      ? [
+        { name: m.players[0].name, group: null, left: 0, text: soloRemaining(m) > 0 ? `Quedan ${soloRemaining(m)} y la negra` : 'A por la negra' },
+        { name: 'Tiros', group: null, left: 0, text: m.best ? `${m.shots} · Mejor ${m.best}` : String(m.shots) },
+      ]
+      : m.players.map((p, i) => ({ name: net.active && i === net.me ? `${p.name} (tú)` : p.name, group: p.group, left: remaining(m, i) })),
+    spin: settings.spin,
     canAct: canAct(),
     actLabel: game.state === 'placing' ? 'Colocar blanca' : 'Tirar',
-    canPlace: game.canPlace() && myTurn(),
+    canPlace: game.canPlace() && myTurn() && !aiTurn(),
     kitchen: m.ballInHand === 'kitchen',
     hint,
   });
@@ -533,6 +652,7 @@ function frame(now) {
   const dt = Math.min((now - lastT) / 1000, 0.1);
   lastT = now;
   pumpNet(now);
+  watchPerformance(dt);
   if (!paused) {
     acc += dt;
     let n = 0;
@@ -543,9 +663,12 @@ function frame(now) {
     }
     if (acc >= DT) acc = 0;
 
+    driveAi(dt);
     if (mode === 'walk') {
       const mv = input.move();
       walker.update(dt, mv.x + touch.move.x, mv.z + touch.move.z, mv.run);
+      // El taco de la maquina se anima aunque el jugador siga caminando.
+      if (aimView.auto) aimView.update(dt, () => sound.cue(pendingCue));
     } else {
       if (game.state === 'aiming') {
         const slow = input.isDown('ShiftLeft', 'ShiftRight') ? 0.15 : 1;
@@ -581,9 +704,18 @@ function frame(now) {
   }
 
   touch.setActive(isTouch && mode === 'walk' && !paused);
+  // El cursor no se ve sobre la imagen mientras se juega; solo al colocar la blanca, que se arrastra.
+  const cursor = paused ? '' : (mode === 'aim' && game.state === 'placing' ? 'grab' : 'none');
+  if (canvas.style.cursor !== cursor) canvas.style.cursor = cursor;
+  // Sonido de rodadura segun lo rapido que van las bolas.
+  let rolling = 0;
+  if (game.state === 'rolling' && !paused) {
+    for (const b of game.table.balls) if (!b.pocketed) rolling += Math.sqrt(b.vx * b.vx + b.vz * b.vz);
+  }
+  sound.roll(rolling);
   balls.sync(game.table);
   updateHud();
-  lighting.render();
+  lighting.render(game.state === 'rolling' || game.state === 'placing' || aimView.active);
 }
 requestAnimationFrame(frame);
 
@@ -612,4 +744,4 @@ checkOrientation();
 openMenu('inicio');
 
 // Acceso para depurar desde la consola.
-window.__billar = { net, pumpNet, settings, menus, pause, room, lighting, game, walker, aimView, camera, scene, renderer, get mode() { return mode; }, enterAim, leaveAim };
+window.__billar = { perf, merged, ai, net, pumpNet, settings, menus, pause, room, lighting, game, walker, aimView, camera, scene, renderer, get mode() { return mode; }, enterAim, leaveAim };

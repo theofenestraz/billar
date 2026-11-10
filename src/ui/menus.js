@@ -6,12 +6,22 @@ const SCREENS = {
     <p class="kicker">Bola 8 · Primera persona</p>
     <h1 class="title">Billar</h1>
     <nav class="list">
+      <button class="item" data-go="unjugador"><span>Un jugador</span><small>Contra la máquina o práctica en solitario</small></button>
       <button class="item" data-go="modo"><span>Multijugador</span><small>Elige cómo jugar con tus amigos</small></button>
       <button class="item" data-go="reglas"><span>Reglas</span><small>Bola 8, versión de bar</small></button>
       <button class="item" data-go="ayuda"><span>Controles</span><small>Cómo moverte y tirar</small></button>
       <button class="item" data-go="ajustes"><span>Ajustes</span><small>Gráficos, sonido y sensibilidad</small></button>
     </nav>
     <p class="status"></p>`,
+  unjugador: `
+    <p class="kicker">Un jugador</p>
+    <h2>¿A qué juegas?</h2>
+    <label>Tu nombre <input class="myname" maxlength="14" autocomplete="off"></label>
+    <nav class="list">
+      <button class="item" data-act="vs-ai"><span>Contra la máquina</span><small>Bola 8 contra un rival de nivel medio</small></button>
+      <button class="item" data-act="solo"><span>En solitario</span><small>Diez bolas: mete las nueve y la negra al final, en los menos tiros posibles</small></button>
+    </nav>
+    <button class="btn ghost" data-act="back">Volver</button>`,
   modo: `
     <p class="kicker">Multijugador</p>
     <h2>¿Cómo queréis jugar?</h2>
@@ -67,6 +77,8 @@ const SCREENS = {
       <p>Es falta embocar la blanca, no tocar ninguna bola o tocar primero una que no es de tu grupo. Tras una falta, el rival tiene bola en mano y coloca la blanca donde quiera.</p>
       <h3>La negra</h3>
       <p>Solo puedes ir a por ella cuando no te queden bolas. Si la embocas antes de tiempo, o haces falta en el tiro en que entra, pierdes la partida.</p>
+      <h3>En solitario</h3>
+      <p>Juegas tú solo con diez bolas: nueve de color y la negra. Emboca las nueve en cualquier orden y la negra al final, en los menos tiros posibles. Si entra la blanca, vuelve al punto de salida y sigues. Si entra la negra antes de tiempo, pierdes.</p>
     </div>
     <button class="btn ghost" data-act="back">Volver</button>`,
   pausa: `
@@ -98,9 +110,11 @@ const SCREENS = {
       <label>Joystick
         <select data-key="joystickSide"><option value="left">A la izquierda</option><option value="right">A la derecha</option></select></label>
       <label>Calidad gráfica
-        <select data-key="quality"><option value="alta">Alta</option><option value="baja">Baja</option></select></label>
+        <select data-key="quality"><option value="auto">Automática</option><option value="alta">Alta</option><option value="media">Media</option><option value="baja">Baja</option></select></label>
       <label>Volumen <input type="range" data-key="volume" min="0" max="1" step="0.05"></label>
-      <label class="check"><input type="checkbox" data-key="guide"> Línea guía al apuntar</label>
+      <label class="check"><input type="checkbox" data-key="guide"> Línea guía de la blanca</label>
+      <label class="check"><input type="checkbox" data-key="guideObject"> Dirección de la bola golpeada</label>
+      <label class="check"><input type="checkbox" data-key="spin"> Efectos en la blanca</label>
     </div>
     <button class="btn primary" data-act="back">Volver</button>`,
   fin: `
@@ -135,7 +149,7 @@ export function createMenus(root, settings, handlers) {
         inp.value = names[Number(inp.dataset.i)];
         inp.addEventListener('input', () => { names[Number(inp.dataset.i)] = inp.value; });
       });
-    } else if (name === 'online') {
+    } else if (name === 'online' || name === 'unjugador') {
       const inp = card.querySelector('.myname');
       inp.value = myName;
       inp.addEventListener('input', () => {
@@ -159,8 +173,11 @@ export function createMenus(root, settings, handlers) {
         });
       });
     } else if (name === 'fin' && data) {
-      card.querySelector('.winner').textContent = `Gana ${data.winner}`;
-      card.querySelector('.score-line').textContent = `${data.players[0].name} ${data.players[0].wins} · ${data.players[1].wins} ${data.players[1].name}`;
+      card.querySelector('.winner').textContent = data.title || `Gana ${data.winner}`;
+      card.querySelector('.score-line').textContent = data.line !== undefined
+        ? data.line
+        : `${data.players[0].name} ${data.players[0].wins} · ${data.players[1].wins} ${data.players[1].name}`;
+      if (data.again) card.querySelector('[data-act="rematch"]').textContent = data.again;
     }
   }
 
@@ -178,6 +195,8 @@ export function createMenus(root, settings, handlers) {
         handlers.onStart(clean);
         break;
       }
+      case 'vs-ai': handlers.onVsAi(ownName()); break;
+      case 'solo': handlers.onSolo(ownName()); break;
       case 'host':
         trail.push(current);
         render('crear');

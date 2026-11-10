@@ -1,15 +1,17 @@
 // Ajustes del jugador, guardados en el dispositivo.
 
-const KEY = 'billar.settings.v1';
+const KEY = 'billar.settings.v2'; // v2: la calidad por defecto pasa a ser automatica
 
 export const DEFAULTS = {
   controls: 'auto', // 'auto' | 'touch' | 'desktop'
   sensitivity: 1,
   invertY: false,
   joystickSide: 'left', // 'left' | 'right'
-  quality: 'alta', // 'alta' | 'baja'
+  quality: 'auto', // 'auto' | 'alta' | 'media' | 'baja'
   volume: 0.8,
-  guide: true,
+  guide: true, // linea de la blanca al apuntar
+  guideObject: true, // direccion que tomara la bola golpeada
+  spin: true, // selector de efecto en la blanca
 };
 
 const oneOf = (v, list, d) => (list.includes(v) ? v : d);
@@ -23,9 +25,11 @@ function clean(raw) {
     sensitivity: num(r.sensitivity, 0.3, 2.5, DEFAULTS.sensitivity),
     invertY: bool(r.invertY, DEFAULTS.invertY),
     joystickSide: oneOf(r.joystickSide, ['left', 'right'], DEFAULTS.joystickSide),
-    quality: oneOf(r.quality, ['alta', 'baja'], DEFAULTS.quality),
+    quality: oneOf(r.quality, ['auto', 'alta', 'media', 'baja'], DEFAULTS.quality),
     volume: num(r.volume, 0, 1, DEFAULTS.volume),
     guide: bool(r.guide, DEFAULTS.guide),
+    guideObject: bool(r.guideObject, DEFAULTS.guideObject),
+    spin: bool(r.spin, DEFAULTS.spin),
   };
 }
 

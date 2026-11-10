@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { HALF_W, HALF_L, BED_Y, R } from '../physics/constants.js';
 import { POCKETS, CUSHIONS } from '../physics/table.js';
-import { makeNoiseTexture, makeBumpTexture } from './textures.js?v=8';
+import { makeNoiseTexture, makeBumpTexture, makeFeltTextures } from './textures.js?v=9';
 
 const OUT_X = 0.685; // media anchura exterior (1,37 / 2)
 const OUT_Z = 1.18; // media longitud exterior (2,36 / 2)
@@ -170,14 +170,16 @@ function roundedHole(cx, cy, w, h, target) {
 export function buildTable() {
   const group = new THREE.Group();
 
+  // Fieltro: trama de fibras cortas y relieve fino. Sin brillo: bajo el foco de la mesa el pano se quemaba.
+  const felt = makeFeltTextures();
   const cloth = new THREE.MeshStandardMaterial({
-    color: '#ffffff',
-    map: makeNoiseTexture({ base: '#2fae86', spread: 16, seed: 11 }),
-    bumpMap: makeBumpTexture({ seed: 5 }),
-    bumpScale: 0.15,
-    roughness: 0.96,
+    color: '#707070', // el foco de la mesa es muy intenso: sin atenuar, el verde se quemaba hacia blanco
+    map: felt.map,
+    bumpMap: felt.bump,
+    bumpScale: 0.3,
+    roughness: 0.97,
+    envMapIntensity: 0.1,
   });
-  cloth.map.repeat.set(1, 1);
   const black = new THREE.MeshPhysicalMaterial({ color: '#0c0c0e', roughness: 0.32, clearcoat: 0.7, clearcoatRoughness: 0.25 });
   const blackMatte = new THREE.MeshStandardMaterial({ color: '#0a0a0b', roughness: 0.75 });
   const alu = new THREE.MeshStandardMaterial({ color: '#c8ccd2', metalness: 1, roughness: 0.28 });
@@ -210,9 +212,10 @@ export function buildTable() {
   // Mueble: paredes este, oeste y sur, fondo, y panel norte con la ventanilla de bolas.
   const cabH = CAB_TOP - CAB_BOTTOM;
   const cabY = (CAB_TOP + CAB_BOTTOM) / 2;
-  for (const s of [-1, 1]) group.add(box(0.02, cabH, CAB_Z * 2, black, s * (CAB_X - 0.01), cabY, 0));
-  group.add(box(CAB_X * 2, cabH, 0.02, black, 0, cabY, CAB_Z - 0.01));
-  group.add(box(CAB_X * 2, 0.02, CAB_Z * 2, blackMatte, 0, CAB_BOTTOM + 0.01, 0));
+  // Las piezas se tocan sin solaparse: asi ninguna cara coincide con otra y no parpadean.
+  for (const s of [-1, 1]) group.add(box(0.02, cabH, CAB_Z * 2 - 0.02, black, s * (CAB_X - 0.01), cabY, 0.01));
+  group.add(box(CAB_X * 2 - 0.04, cabH, 0.02, black, 0, cabY, CAB_Z - 0.01));
+  group.add(box(CAB_X * 2 - 0.04, 0.02, CAB_Z * 2 - 0.04, blackMatte, 0, CAB_BOTTOM + 0.01, 0));
 
   const panel = new THREE.Shape();
   panel.moveTo(-CAB_X, CAB_BOTTOM);

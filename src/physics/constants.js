@@ -17,3 +17,6 @@ export const V_REST = 0.005; // por debajo de esta velocidad la bola se detiene
 export const MIN_CUE_SPEED = 0.3;
 export const MAX_CUE_SPEED = 9;
 export const MAX_STEPS = 240 * 45; // limite de duracion de un tiro
+
+export const MU_CUSHION = 0.14; // agarre de la banda sobre el efecto lateral
+export const MAX_TIP_OFFSET = 0.5; // desplazamiento maximo del golpe, en radios de bola

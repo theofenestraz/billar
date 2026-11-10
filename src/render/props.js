@@ -3,7 +3,7 @@
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { makeFoosballFieldTexture, makeSnackMachineTexture, makeCoffeeMachineTexture } from './textures.js?v=8';
+import { makeFoosballFieldTexture, makeSnackMachineTexture, makeCoffeeMachineTexture } from './textures.js?v=9';
 
 const std = (o) => new THREE.MeshStandardMaterial({ envMapIntensity: 0.15, ...o });
 const unlit = (o) => new THREE.MeshBasicMaterial({ toneMapped: false, ...o });
@@ -235,4 +235,49 @@ export function buildCafeSet(chairColors) {
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) b.box(m, 0.03, 0.45, 0.03, sx * 0.18, 0.225, sz * 0.17, 0, 0, 0, parent);
   });
   return b.build(false);
+}
+
+// ---------- Fundido de mallas estaticas ----------
+// Une en una sola malla todas las que comparten material dentro de un grupo que no se mueve.
+// La sala pasa de cientos de llamadas de dibujo a unas decenas, que es lo que mas pesa en un movil.
+export function mergeStatic(root) {
+  root.updateMatrixWorld(true);
+  const inverse = new THREE.Matrix4().copy(root.matrixWorld).invert();
+  const m = new THREE.Matrix4();
+  const buckets = new Map();
+  const taken = [];
+  root.traverse((o) => {
+    if (!o.isMesh || o.isInstancedMesh || Array.isArray(o.material) || !o.visible) return;
+    const mat = o.material;
+    if (mat.transparent || o.renderOrder !== 0) return; // el orden de pintado de lo transparente no se toca
+    const g = o.geometry;
+    if (!g.attributes.position || !g.attributes.normal || !g.attributes.uv) return;
+    const key = `${mat.uuid}|${o.castShadow ? 1 : 0}${o.receiveShadow ? 1 : 0}`;
+    if (!buckets.has(key)) buckets.set(key, { mat, cast: o.castShadow, receive: o.receiveShadow, list: [] });
+    m.multiplyMatrices(inverse, o.matrixWorld);
+    const flat = g.index ? g.toNonIndexed() : g.clone();
+    // Solo los tres atributos comunes, para que todas las piezas sean compatibles.
+    for (const name of Object.keys(flat.attributes)) if (!['position', 'normal', 'uv'].includes(name)) flat.deleteAttribute(name);
+    flat.clearGroups();
+    flat.applyMatrix4(m);
+    buckets.get(key).list.push(flat);
+    taken.push(o);
+  });
+  let made = 0;
+  for (const { mat, cast, receive, list } of buckets.values()) {
+    const merged = mergeGeometries(list);
+    list.forEach((g) => g.dispose());
+    if (!merged) continue;
+    const mesh = new THREE.Mesh(merged, mat);
+    mesh.castShadow = cast;
+    mesh.receiveShadow = receive;
+    mesh.matrixAutoUpdate = false;
+    root.add(mesh);
+    made++;
+  }
+  for (const o of taken) {
+    o.parent.remove(o);
+    o.geometry.dispose();
+  }
+  return { before: taken.length, after: made };
 }

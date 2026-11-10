@@ -4,6 +4,7 @@
 import { MIN_CUE_SPEED, MAX_CUE_SPEED, MAX_STEPS } from '../physics/constants.js';
 import { createRack, strike, step, isAtRest, forceRest, findFreeSpot, isLegalCuePosition } from '../physics/simulate.js';
 import { newMatch, summarizeShot, applyShot, rematch as rulesRematch } from '../rules/eightball.js';
+import { newSolo, applySoloShot } from '../rules/solo.js';
 
 const MIN_POWER = 0.03;
 const HEAD_Z = 0.495;
@@ -21,7 +22,8 @@ export function createGame(names) {
   function resolveShot() {
     if (!isAtRest(game.table)) forceRest(game.table);
     const summary = summarizeShot(shotEvents);
-    game.match = applyShot(game.match, summary);
+    const solo = game.match.mode === 'solo';
+    game.match = solo ? applySoloShot(game.match, summary) : applyShot(game.match, summary);
     if (game.match.lastResult.rerack) {
       game.table = createRack();
     } else if (summary.cuePocketed) {
@@ -42,11 +44,12 @@ export function createGame(names) {
     state: 'placing', // 'placing' | 'aiming' | 'rolling' | 'over'
 
     // power01 entre 0 y 1. Devuelve false si el tiro no se acepta.
-    shoot(dirX, dirZ, power01) {
+    // side y top: efecto, de -1 a 1 (ver strike).
+    shoot(dirX, dirZ, power01, side = 0, top = 0) {
       if (game.state !== 'aiming' || !(power01 >= MIN_POWER)) return false;
       const p = power01 > 1 ? 1 : power01;
       const speed = MIN_CUE_SPEED + p * p * (MAX_CUE_SPEED - MIN_CUE_SPEED);
-      strike(game.table, { dirX, dirZ, speed });
+      strike(game.table, { dirX, dirZ, speed, side, top });
       shotEvents = [];
       steps = 0;
       game.state = 'rolling';
@@ -95,15 +98,28 @@ export function createGame(names) {
       return events;
     },
 
-    restart(newNames) {
-      const n = newNames || [game.match.players[0].name, game.match.players[1].name];
-      game.match = newMatch(n);
-      game.table = createRack();
+    // mode 'solo': un jugador con diez bolas. Sin mode se mantiene el modo actual.
+    restart(newNames, mode) {
+      const solo = mode ? mode === 'solo' : game.match.mode === 'solo';
+      if (solo) {
+        const name = newNames ? newNames[0] : game.match.players[0].name;
+        const best = game.match.mode === 'solo' ? game.match.best : null;
+        game.match = newSolo(name, best);
+        game.table = createRack('solo');
+      } else {
+        const n = newNames || [game.match.players[0].name, game.match.players[1].name];
+        game.match = newMatch(n);
+        game.table = createRack();
+      }
       game.state = 'placing';
       changed();
     },
 
     rematch() {
+      if (game.match.mode === 'solo') {
+        game.restart();
+        return;
+      }
       game.match = rulesRematch(game.match);
       game.table = createRack();
       game.state = 'placing';
