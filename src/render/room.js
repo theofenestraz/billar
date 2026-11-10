@@ -5,8 +5,8 @@ import * as THREE from 'three';
 import {
   makeNoiseTexture, makeBumpTexture, makeDartboardTexture, makePosterTexture, makeSignTexture,
   makeNeonRackTexture, makeWashTexture, makeCirclesPanelTexture, makePlasticTexture, makeSafetySignTexture,
-} from './textures.js?v=26';
-import { buildFoosball, buildShellChair, buildVendingMachine, buildHighTable, buildCafeSet } from './props.js?v=26';
+} from './textures.js?v=27';
+import { buildFoosball, buildShellChair, buildVendingMachine, buildHighTable, buildCafeSet } from './props.js?v=27';
 
 export const ROOM = {
   minX: -4.6, maxX: 7.3, minZ: -8.0, maxZ: 5.7, height: 3.0,
@@ -561,12 +561,13 @@ export function buildRoom() {
   cyl(0.16, 0.03, blackMat, E - 0.35, 0.015, -0.75, 16);
   panel(0.55, 0.8, std({ color: '#c3dc4a', roughness: 0.7, side: THREE.DoubleSide }), E - 0.37, 1.72, -0.75, 'w');
 
-  // Futbolin, bajo la A del sureste.
+  // Futbolin, bajo la A del sureste, por delante de los pilares. En su mismo plano no cabia: los
+  // pilares se juntan al subir y a la altura del tablero solo dejan 1,44 m, lo que mide el futbolin.
   const fb = buildFoosball();
-  fb.position.set(5.4, 0, 2.4);
+  fb.position.set(5.4, 0, 1.55);
   fb.rotation.y = 0.12;
   group.add(fb);
-  collide(4.6, 6.2, 1.8, 3.0);
+  collide(4.6, 6.2, 0.95, 2.15);
 
   // ---------- Techo: tuberias, carriles de focos y discos acusticos ----------
   const pipe = (x0, z0, x1, z1, r = 0.045) => {

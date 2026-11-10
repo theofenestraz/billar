@@ -698,3 +698,55 @@ export function makeCueTextures() {
   const rough = new THREE.CanvasTexture(rc);
   return { map, rough };
 }
+
+// Franja decorada de los laterales del futbolin: fondo grafito con bandas en diagonal de los dos
+// equipos y filos plateados arriba y abajo.
+export function makeFoosballSideTexture() {
+  const w = 1024;
+  const h = 96;
+  const c = canvas(w, h);
+  const g = c.getContext('2d');
+  const grad = g.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, '#26272b');
+  grad.addColorStop(1, '#16171a');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, w, h);
+  // Bandas en diagonal: azul a la izquierda, roja a la derecha, que se cruzan en el centro.
+  const stripe = (x0, color, dir) => {
+    g.fillStyle = color;
+    for (let k = 0; k < 3; k++) {
+      const x = x0 + dir * k * 26;
+      g.beginPath();
+      g.moveTo(x, h - 10);
+      g.lineTo(x + 14, h - 10);
+      g.lineTo(x + 14 + dir * 60, 10);
+      g.lineTo(x + dir * 60, 10);
+      g.closePath();
+      g.fill();
+    }
+  };
+  for (const x of [120, 300]) stripe(x, '#2f5fc4', 1);
+  for (const x of [w - 134, w - 314]) stripe(x, '#d2364a', -1);
+  // Balon estilizado en el centro.
+  g.strokeStyle = '#e9e9e6';
+  g.lineWidth = 4;
+  g.beginPath();
+  g.arc(w / 2, h / 2, 24, 0, Math.PI * 2);
+  g.stroke();
+  g.fillStyle = '#e9e9e6';
+  g.beginPath();
+  for (let i = 0; i < 5; i++) {
+    const a = -Math.PI / 2 + (i * 2 * Math.PI) / 5;
+    g.lineTo(w / 2 + Math.cos(a) * 9, h / 2 + Math.sin(a) * 9);
+  }
+  g.closePath();
+  g.fill();
+  // Filos plateados.
+  g.fillStyle = '#b9bcc0';
+  g.fillRect(0, 3, w, 3);
+  g.fillRect(0, h - 6, w, 3);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}

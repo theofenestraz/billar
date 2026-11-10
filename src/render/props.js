@@ -3,7 +3,7 @@
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { makeFoosballFieldTexture, makeSnackMachineTexture, makeCoffeeMachineTexture } from './textures.js?v=26';
+import { makeFoosballFieldTexture, makeFoosballSideTexture, makeNoiseTexture, makeSnackMachineTexture, makeCoffeeMachineTexture } from './textures.js?v=27';
 
 const std = (o) => new THREE.MeshStandardMaterial({ envMapIntensity: 0.15, ...o });
 const unlit = (o) => new THREE.MeshBasicMaterial({ toneMapped: false, ...o });
@@ -52,10 +52,13 @@ export function buildFoosball() {
   const ROD_Y = 0.862;
   const b = new Batch();
 
-  const black = std({ color: '#0d0d0f', roughness: 0.42 });
-  const gloss = std({ color: '#060607', roughness: 0.16, envMapIntensity: 0.6 });
-  const chrome = std({ color: '#b4b8bc', roughness: 0.42, metalness: 0.9, envMapIntensity: 0.9 });
-  const rubber = std({ color: '#141416', roughness: 0.85 });
+  // Laminado grafito con algo de grano: en negro puro el mueble se veia como un hueco.
+  const black = std({ map: makeNoiseTexture({ base: '#1d1e22', spread: 10, seed: 41, repeat: 2, blotches: 6 }), roughness: 0.5 });
+  const gloss = std({ color: '#0c0c0e', roughness: 0.2, envMapIntensity: 0.8 });
+  // Cromo menos metalico: con la sala oscura reflejada, el metal puro salia casi negro.
+  const chrome = std({ color: '#d4d7db', roughness: 0.28, metalness: 0.55, envMapIntensity: 1.3 });
+  const sideMat = std({ map: makeFoosballSideTexture(), roughness: 0.35, envMapIntensity: 0.5 });
+  const rubber = std({ color: '#232327', roughness: 0.8 });
   const fieldMat = std({ map: makeFoosballFieldTexture(), roughness: 0.38, envMapIntensity: 0.3 });
   const skin = std({ color: '#ead9c8', roughness: 0.6 });
   const teamA = std({ color: '#2f5fc4', roughness: 0.5 });
@@ -74,6 +77,10 @@ export function buildFoosball() {
       b.box(gloss, 0.52, 0.19, 0.008, dx, 0.685, s * (Wd / 2 + 0.003));
       b.add(new THREE.CylinderGeometry(0.014, 0.014, 0.012, 12), chrome, dx, 0.685, s * (Wd / 2 + 0.012), Math.PI / 2);
     }
+    // Franja decorada en la parte alta de cada lateral, por encima de los cajones.
+    b.add(new THREE.PlaneGeometry(L - 0.06, 0.1), sideMat, 0, TOP - 0.06, s * (Wd / 2 + 0.0015), 0, s > 0 ? 0 : Math.PI, 0);
+    // Cantoneras metalicas en las cuatro esquinas de arriba.
+    for (const sx of [-1, 1]) b.box(chrome, 0.05, 0.03, 0.05, sx * (L / 2 - 0.02), TOP - 0.006, s * (Wd / 2 - 0.02));
     // Porterias: hueco oscuro en cada testero.
     b.box(rubber, 0.006, 0.07, 0.2, s * (L / 2 - 0.032), FIELD + 0.036, 0);
   }
