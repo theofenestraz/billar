@@ -7,10 +7,17 @@ export function groupOf(id) {
 }
 
 const GROUP_NAME = { solids: 'lisas', stripes: 'rayadas' };
+
+// Tronera contraria de cada tronera, por simetria respecto al centro de la mesa.
+// Orden de POCKETS en physics/table.js: 0 (-x,-z), 1 (+x,-z), 2 (-x,+z), 3 (+x,+z), 4 (-x,0), 5 (+x,0).
+export const OPPOSITE = [3, 2, 1, 0, 5, 4];
 const other = (g) => (g === 'solids' ? 'stripes' : 'solids');
 
-export function newMatch(names, breaker = 0) {
+// opts.blackPocket: la negra tiene que entrar en la tronera contraria a la ultima bola del grupo.
+export function newMatch(names, breaker = 0, opts = {}) {
   return {
+    blackPocket: !!opts.blackPocket,
+    lastPocket: { solids: null, stripes: null }, // tronera de la ultima bola embocada de cada grupo
     players: [
       { name: names[0], group: null, wins: 0 },
       { name: names[1], group: null, wins: 0 },
@@ -43,15 +50,26 @@ export function summarizeShot(events) {
   let firstContact = null;
   const pocketed = [];
   let cuePocketed = false;
+  const pocketOf = {}; // id de bola -> tronera
   for (const e of events) {
     if (e.type === 'ballBall' && firstContact === null && (e.a === 0 || e.b === 0)) {
       firstContact = e.a === 0 ? e.b : e.a;
     } else if (e.type === 'pocket') {
       if (e.ball === 0) cuePocketed = true;
       else pocketed.push(e.ball);
+      if (typeof e.pocket === 'number') pocketOf[e.ball] = e.pocket;
     }
   }
-  return { firstContact, pocketed, cuePocketed };
+  return { firstContact, pocketed, cuePocketed, pocketOf };
+}
+
+// Tronera donde tiene que entrar la negra para este jugador, o null si vale cualquiera.
+export function blackTarget(match, player) {
+  if (!match.blackPocket || !match.lastPocket) return null;
+  const g = match.players[player].group;
+  if (g === null || leftInGroup(match.pocketed, g) > 0) return null;
+  const last = match.lastPocket[g];
+  return last === null || last === undefined ? null : OPPOSITE[last];
 }
 
 const FOUL_TEXT = {
@@ -97,16 +115,27 @@ export function applyShot(match, summary) {
   }
 
   for (const id of dropped) if (!next.pocketed.includes(id)) next.pocketed.push(id);
+  // Se recuerda en que tronera entro la ultima bola de cada grupo.
+  if (match.lastPocket) {
+    next.lastPocket = { ...match.lastPocket };
+    const at = summary.pocketOf || {};
+    for (const id of dropped) {
+      const g = groupOf(id);
+      if ((g === 'solids' || g === 'stripes') && typeof at[id] === 'number') next.lastPocket[g] = at[id];
+    }
+  }
 
   // 2. Negra embocada: fin de la partida.
   if (eight) {
-    const win = clearedBefore && result.foul === null;
+    const target = blackTarget(match, me);
+    const wrongPocket = target !== null && clearedBefore && (summary.pocketOf || {})[8] !== target;
+    const win = clearedBefore && result.foul === null && !wrongPocket;
     next.winner = win ? me : rival;
     next.phase = 'over';
     players[next.winner].wins++;
     result.message = win
       ? `${myName} emboca la negra y gana`
-      : `${myName} pierde: ${clearedBefore ? 'negra con falta' : 'negra antes de tiempo'}`;
+      : `${myName} pierde: ${!clearedBefore ? 'negra antes de tiempo' : wrongPocket && result.foul === null ? 'negra en otra tronera' : 'negra con falta'}`;
     return next;
   }
 
@@ -147,7 +176,7 @@ export function applyShot(match, summary) {
 // Partida nueva con los mismos jugadores. Saca quien perdio.
 export function rematch(match) {
   const loser = match.winner === null ? 0 : 1 - match.winner;
-  const m = newMatch([match.players[0].name, match.players[1].name], loser);
+  const m = newMatch([match.players[0].name, match.players[1].name], loser, { blackPocket: match.blackPocket });
   m.players[0].wins = match.players[0].wins;
   m.players[1].wins = match.players[1].wins;
   return m;

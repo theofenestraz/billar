@@ -12,6 +12,8 @@ export const DEFAULTS = {
   guide: true, // linea de la blanca al apuntar
   guideObject: true, // direccion que tomara la bola golpeada
   spin: true, // selector de efecto en la blanca
+  blackPocket: true, // la negra a la tronera contraria de la ultima bola del grupo
+  showFps: false,
 };
 
 const oneOf = (v, list, d) => (list.includes(v) ? v : d);
@@ -30,6 +32,8 @@ function clean(raw) {
     guide: bool(r.guide, DEFAULTS.guide),
     guideObject: bool(r.guideObject, DEFAULTS.guideObject),
     spin: bool(r.spin, DEFAULTS.spin),
+    blackPocket: bool(r.blackPocket, DEFAULTS.blackPocket),
+    showFps: bool(r.showFps, DEFAULTS.showFps),
   };
 }
 

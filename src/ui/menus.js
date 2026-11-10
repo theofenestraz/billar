@@ -77,6 +77,7 @@ const SCREENS = {
       <p>Es falta embocar la blanca, no tocar ninguna bola o tocar primero una que no es de tu grupo. Tras una falta, el rival tiene bola en mano y coloca la blanca donde quiera.</p>
       <h3>La negra</h3>
       <p>Solo puedes ir a por ella cuando no te queden bolas. Si la embocas antes de tiempo, o haces falta en el tiro en que entra, pierdes la partida.</p>
+      <p>Con la opción «Negra a la tronera contraria» (activada de serie), la negra tiene que entrar en la tronera opuesta, al otro lado de la mesa, a la que entró tu última bola. Esa tronera se marca con un aro verde. Si entra en otra, pierdes. Se cambia en Ajustes y vale para la partida siguiente.</p>
       <h3>En solitario</h3>
       <p>Juegas tú solo con diez bolas: nueve de color y la negra. Emboca las nueve en cualquier orden y la negra al final, en los menos tiros posibles. Si entra la blanca, vuelve al punto de salida y sigues. Si entra la negra antes de tiempo, pierdes.</p>
     </div>
@@ -115,6 +116,8 @@ const SCREENS = {
       <label class="check"><input type="checkbox" data-key="guide"> Línea guía de la blanca</label>
       <label class="check"><input type="checkbox" data-key="guideObject"> Dirección de la bola golpeada</label>
       <label class="check"><input type="checkbox" data-key="spin"> Efectos en la blanca</label>
+      <label class="check"><input type="checkbox" data-key="blackPocket"> Negra a la tronera contraria</label>
+      <label class="check"><input type="checkbox" data-key="showFps"> Mostrar fotogramas por segundo</label>
     </div>
     <button class="btn primary" data-act="back">Volver</button>`,
   fin: `

@@ -39,6 +39,8 @@ export function createGame(names) {
   }
 
   const game = {
+    // blackPocket: regla de la negra a la tronera contraria. Se aplica al empezar cada partida.
+    options: { blackPocket: false },
     table: createRack(),
     match: newMatch(names),
     state: 'placing', // 'placing' | 'aiming' | 'rolling' | 'over'
@@ -104,11 +106,11 @@ export function createGame(names) {
       if (solo) {
         const name = newNames ? newNames[0] : game.match.players[0].name;
         const best = game.match.mode === 'solo' ? game.match.best : null;
-        game.match = newSolo(name, best);
+        game.match = newSolo(name, best, game.options);
         game.table = createRack('solo');
       } else {
         const n = newNames || [game.match.players[0].name, game.match.players[1].name];
-        game.match = newMatch(n);
+        game.match = newMatch(n, 0, game.options);
         game.table = createRack();
       }
       game.state = 'placing';

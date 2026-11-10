@@ -5,7 +5,7 @@
 import { R, HALF_W, HALF_L } from '../physics/constants.js';
 import { POCKETS } from '../physics/table.js';
 import { simulateShot, isLegalCuePosition, findFreeSpot } from '../physics/simulate.js';
-import { groupOf, summarizeShot, applyShot } from '../rules/eightball.js';
+import { groupOf, summarizeShot, applyShot, blackTarget } from '../rules/eightball.js';
 
 const AIM_ERROR = 0.011; // amplitud del error de punteria, en radianes
 const MAX_CUT_COS = 0.38; // cortes mas finos que esto no se intentan
@@ -53,8 +53,10 @@ function pathClear(table, ax, az, bx, bz, skipA, skipB) {
 // Tiros de tronera posibles desde (cx, cz), ordenados de mejor a peor.
 function candidates(table, match, cx, cz) {
   const out = [];
+  const only = blackTarget(match, match.turn); // tronera obligatoria para la negra
   for (const ball of legalTargets(table, match)) {
-    for (const p of TARGETS) {
+    for (const [k, p] of TARGETS.entries()) {
+      if (ball.id === 8 && only !== null && k !== only) continue;
       const tx = p.x - ball.x;
       const tz = p.z - ball.z;
       const d2 = Math.hypot(tx, tz);
@@ -126,15 +128,29 @@ export function chooseShot(table, match, rand = Math.random) {
   const targets = legalTargets(table, match)
     .map((b) => ({ b, d: Math.hypot(b.x - cue.x, b.z - cue.z) }))
     .sort((a, b) => a.d - b.d);
+  // Se prueban varias fuerzas y algo de corte a cada lado; se evita sobre todo perder la partida.
   let fallback = null;
+  let notLosing = null;
   for (const { b, d } of targets) {
     if (d < 1e-6) continue;
-    const shot = { dirX: (b.x - cue.x) / d, dirZ: (b.z - cue.z) / d, power: Math.max(0.2, Math.min(0.45, 0.18 + 0.2 * d)) };
-    if (!fallback) fallback = shot;
-    const o = outcome(table, match, shot);
-    if (!o.foul && !o.loses) return withError(shot, rand);
+    const ux = (b.x - cue.x) / d;
+    const uz = (b.z - cue.z) / d;
+    for (const cut of [0, 0.35, -0.35, 0.7, -0.7]) {
+      // Desplazar el punto de mira hacia un lado de la bola, en fracciones de diametro.
+      const ax = b.x - uz * cut * 2 * R - cue.x;
+      const az = b.z + ux * cut * 2 * R - cue.z;
+      const al = Math.hypot(ax, az);
+      for (const power of [0.22, 0.32, 0.16, 0.45]) {
+        const shot = { dirX: ax / al, dirZ: az / al, power };
+        if (!fallback) fallback = shot;
+        const o = outcome(table, match, shot);
+        if (o.loses) continue;
+        if (!notLosing) notLosing = shot;
+        if (!o.foul) return withError(shot, rand);
+      }
+    }
   }
-  return withError(fallback || { dirX: 0, dirZ: -1, power: 0.3 }, rand);
+  return withError(notLosing || fallback || { dirX: 0, dirZ: -1, power: 0.3 }, rand);
 }
 
 // Donde colocar la blanca con bola en mano.
@@ -142,8 +158,10 @@ export function choosePlacement(table, match) {
   const kitchen = match.ballInHand === 'kitchen';
   if (match.phase === 'break') return findFreeSpot(table, 0.14, HEAD_Z + 0.12, true);
   let best = null;
+  const only = blackTarget(match, match.turn);
   for (const ball of legalTargets(table, match)) {
-    for (const p of TARGETS) {
+    for (const [k, p] of TARGETS.entries()) {
+      if (ball.id === 8 && only !== null && k !== only) continue;
       const d2 = Math.hypot(p.x - ball.x, p.z - ball.z);
       if (d2 < 1e-6) continue;
       const ux = (p.x - ball.x) / d2;

@@ -83,10 +83,12 @@ export function createHud(root, handlers) {
   let spinTap = 0;
   let shown = { side: 0, top: 0 };
   let noDraw = false; // el taco va inclinado: la mitad de abajo no cuenta
+  let noSpin = false; // pegada a la banda: sin efecto
   const showSpin = (side, top) => {
     shown = { side, top };
-    const t = noDraw && top < 0 ? 0 : top;
-    spinDot.style.left = `${50 + side * 36}%`;
+    const t = noSpin ? 0 : noDraw && top < 0 ? 0 : top;
+    const sd = noSpin ? 0 : side;
+    spinDot.style.left = `${50 + sd * 36}%`;
     spinDot.style.top = `${50 - t * 36}%`;
   };
   const spinAt = (e) => {
@@ -182,10 +184,12 @@ export function createHud(root, handlers) {
       q('.aim').classList.toggle('show', vm.mode === 'aim' && vm.state === 'aiming');
       q('.replace').hidden = !vm.canPlace;
       q('.spin').hidden = !vm.spin;
-      if (noDraw !== !!vm.noDraw) {
+      if (noDraw !== !!vm.noDraw || noSpin !== !!vm.noSpin) {
         noDraw = !!vm.noDraw;
-        spinBall.classList.toggle('nodraw', noDraw);
-        q('.spin-label').textContent = noDraw ? 'Sin efecto atrás' : 'Efecto';
+        noSpin = !!vm.noSpin;
+        spinBall.classList.toggle('nodraw', noDraw && !noSpin);
+        spinBall.classList.toggle('nospin', noSpin);
+        q('.spin-label').textContent = noSpin ? 'Sin efecto' : noDraw ? 'Sin efecto atrás' : 'Efecto';
         showSpin(shown.side, shown.top);
       }
       q('.place').classList.toggle('show', vm.mode === 'aim' && vm.state === 'placing');

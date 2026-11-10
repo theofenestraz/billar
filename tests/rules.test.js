@@ -124,3 +124,50 @@ test('rules: rematch keeps wins and the loser breaks', () => {
   const r = rematch(over);
   assert(r.phase === 'break' && r.turn === 0 && r.players[1].wins === 1 && r.players[0].group === null && r.pocketed.length === 0);
 });
+
+// ---------- Negra a la tronera contraria ----------
+import { blackTarget, OPPOSITE } from '../src/rules/eightball.js';
+
+const withPockets = (m) => m; // las partidas de abajo se construyen con el campo pocketOf
+const ruled = () => {
+  let m = applyShot(newMatch(['A', 'B'], 0, { blackPocket: true }), shot(1));
+  m = applyShot(m, shot(1));
+  m = applyShot(m, { firstContact: 1, pocketed: [1], cuePocketed: false, pocketOf: { 1: 3 } });
+  return m;
+};
+
+test('black pocket: opposite pockets pair up through the centre', () => {
+  for (let k = 0; k < 6; k++) assert(OPPOSITE[OPPOSITE[k]] === k && OPPOSITE[k] !== k);
+  assert(OPPOSITE[0] === 3 && OPPOSITE[1] === 2 && OPPOSITE[4] === 5);
+});
+
+test('black pocket: remembers where the last ball of each group went', () => {
+  const m = ruled();
+  assert(m.players[0].group === 'solids' && m.lastPocket.solids === 3);
+  const m2 = applyShot(m, { firstContact: 2, pocketed: [2, 9], cuePocketed: false, pocketOf: { 2: 4, 9: 1 } });
+  assert(m2.lastPocket.solids === 4 && m2.lastPocket.stripes === 1);
+  assert(blackTarget(m2, 0) === null, 'target before the group is cleared');
+});
+
+test('black pocket: black must go in the pocket opposite the last own ball', () => {
+  let m = ruled();
+  m = applyShot(m, { firstContact: 2, pocketed: [2, 3, 4, 5, 6, 7], cuePocketed: false, pocketOf: { 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 5 } });
+  assert(blackTarget(m, 0) === OPPOSITE[5] && blackTarget(m, 1) === null);
+  const good = applyShot(m, { firstContact: 8, pocketed: [8], cuePocketed: false, pocketOf: { 8: 4 } });
+  assert(good.phase === 'over' && good.winner === 0, 'right pocket did not win');
+  const bad = applyShot(m, { firstContact: 8, pocketed: [8], cuePocketed: false, pocketOf: { 8: 3 } });
+  assert(bad.phase === 'over' && bad.winner === 1 && /otra tronera/.test(bad.lastResult.message), 'wrong pocket did not lose');
+});
+
+test('black pocket: switched off, any pocket wins as before', () => {
+  let m = applyShot(newMatch(['A', 'B']), shot(1));
+  m = applyShot(m, shot(1));
+  m = applyShot(m, { firstContact: 1, pocketed: [1, 2, 3, 4, 5, 6, 7], cuePocketed: false, pocketOf: { 7: 5 } });
+  const any = applyShot(m, { firstContact: 8, pocketed: [8], cuePocketed: false, pocketOf: { 8: 3 } });
+  assert(any.winner === 0 && blackTarget(m, 0) === null);
+});
+
+test('black pocket: rematch keeps the rule', () => {
+  const m = { ...ruled(), phase: 'over', winner: 0 };
+  assert(rematch(m).blackPocket === true);
+});

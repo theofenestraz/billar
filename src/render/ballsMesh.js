@@ -3,8 +3,8 @@
 import * as THREE from 'three';
 import { R, BED_Y } from '../physics/constants.js';
 import { POCKETS } from '../physics/table.js';
-import { makeBallTexture } from './textures.js?v=14';
-import { TRAY_Y, TRAY_Z } from './tableMesh.js?v=14';
+import { makeBallTexture } from './textures.js?v=15';
+import { TRAY_Y, TRAY_Z } from './tableMesh.js?v=15';
 
 const UP = new THREE.Vector3(0, 1, 0);
 

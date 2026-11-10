@@ -5,7 +5,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { ROOM } from './room.js?v=14';
+import { ROOM } from './room.js?v=15';
 
 // Niveles de calidad. half: se apaga la mitad de los focos de relleno y se sube el resto.
 const LEVELS = {

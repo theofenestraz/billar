@@ -184,3 +184,27 @@ test('ai: breaks into the rack and places the cue ball legally', () => {
   const p = choosePlacement(t, m);
   assert(Math.abs(p.x) <= HALF_W - R && Math.abs(p.z) <= HALF_L - R, 'placement off the bed');
 });
+
+import { soloBlackTarget } from '../src/rules/solo.js';
+
+test('solo: with the rule on, the black must go opposite the last colour', () => {
+  let m = newSolo('A', null, { blackPocket: true });
+  m = applySoloShot(m, { firstContact: 1, pocketed: [1, 2, 3, 4, 5, 9, 10, 11, 12], cuePocketed: false, pocketOf: { 12: 0 } });
+  assert(soloBlackTarget(m) === 3);
+  assert(applySoloShot(m, { firstContact: 8, pocketed: [8], cuePocketed: false, pocketOf: { 8: 3 } }).winner === 0);
+  const bad = applySoloShot(m, { firstContact: 8, pocketed: [8], cuePocketed: false, pocketOf: { 8: 1 } });
+  assert(bad.winner === -1 && /otra tronera/.test(bad.lastResult.message));
+});
+
+test('ai: aims the black only at the required pocket', () => {
+  const t = layout([[0, 0, 0.2], [8, 0.3, 0.7]]);
+  const m = { ...newMatch(['A', 'M'], 0, { blackPocket: true }), turn: 1, phase: 'play', ballInHand: null };
+  m.players[1].group = 'stripes';
+  m.players[0].group = 'solids';
+  m.pocketed = [9, 10, 11, 12, 13, 14, 15];
+  m.lastPocket = { solids: null, stripes: 3 }; // la negra debe ir a la 0, la esquina contraria
+  const shot = chooseShot(t, m, fixedRand);
+  const { events } = simulateShot(t, { dirX: shot.dirX, dirZ: shot.dirZ, speed: 0.3 + shot.power * shot.power * 8.7 });
+  const into = events.find((e) => e.type === 'pocket' && e.ball === 8);
+  assert(!into || into.pocket === 0, `black went into pocket ${into && into.pocket}`);
+});

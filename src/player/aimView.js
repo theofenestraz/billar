@@ -2,6 +2,9 @@
 
 import * as THREE from 'three';
 import { R, BED_Y, HALF_W, HALF_L } from '../physics/constants.js';
+
+const RAIL_TOP = 0.04 - R; // altura del borde de la banda sobre el centro de la bola
+const TIP_R = 0.009; // grosor del taco cerca de la punta
 import { predictAim } from '../physics/aim.js';
 
 const ARM = 0.62; // distancia de la camara a la blanca
@@ -114,11 +117,25 @@ export function createAimView(scene, game) {
 
   // Inclinacion que necesita el taco para pasar por encima de las bolas que hay detras de la blanca.
   let tilt = BASE_TILT;
+  // Inclinacion que pide la banda que queda detras de la blanca, o 0 si no pide nada especial.
+  function railTilt(aimY) {
+    const cueBall = game.table.balls[0];
+    const d = dir();
+    // Distancia, en la linea del taco hacia atras, hasta el borde de la banda.
+    let s = Infinity;
+    if (d.x < 0) s = Math.min(s, (HALF_W - cueBall.x) / -d.x);
+    if (d.x > 0) s = Math.min(s, (cueBall.x + HALF_W) / d.x);
+    if (d.z < 0) s = Math.min(s, (HALF_L - cueBall.z) / -d.z);
+    if (d.z > 0) s = Math.min(s, (cueBall.z + HALF_L) / d.z);
+    const rise = RAIL_TOP + TIP_R + 0.003 - aimY;
+    return Math.atan(rise / Math.max(s, 0.004));
+  }
+
   // aimY: altura del punto de la blanca al que apunta el taco, respecto a su centro.
   function neededTilt(aimY) {
     const cueBall = game.table.balls[0];
     const d = dir();
-    let tan = Math.tan(BASE_TILT);
+    let tan = Math.tan(Math.max(BASE_TILT, railTilt(aimY)));
     for (const b of game.table.balls) {
       if (b.id === 0 || b.pocketed) continue;
       const rx = b.x - cueBall.x;
@@ -136,8 +153,10 @@ export function createAimView(scene, game) {
   }
   // Con el taco muy inclinado por una bola se golpea desde arriba: no cabe efecto hacia atras.
   let blockedNow = false;
-  const blocked = () => blockedNow;
-  const topUsed = () => (blockedNow && spinTop < 0 ? 0 : spinTop);
+  let noSpinNow = false; // blanca pegada a la banda: el taco va por encima y no hay efecto
+  const blocked = () => blockedNow || noSpinNow;
+  const topUsed = () => (noSpinNow ? 0 : blockedNow && spinTop < 0 ? 0 : spinTop);
+  const sideUsed = () => (noSpinNow ? 0 : spinSide);
 
   function updateCue() {
     const cueBall = game.table.balls[0];
@@ -148,9 +167,15 @@ export function createAimView(scene, game) {
       // Durante el golpe no cambia. Primero se prueba con el efecto elegido; si obliga a inclinar
       // demasiado, se golpea desde arriba sin efecto hacia atras.
       const off0 = 0.5 * R;
-      tilt = neededTilt(spinTop * off0);
-      blockedNow = spinTop < 0 ? tilt > DRAW_LIMIT : neededTilt(-off0) > DRAW_LIMIT;
-      if (blockedNow && spinTop < 0) tilt = neededTilt(0);
+      noSpinNow = railTilt(0) > DRAW_LIMIT;
+      if (noSpinNow) {
+        blockedNow = true;
+        tilt = neededTilt(0);
+      } else {
+        tilt = neededTilt(spinTop * off0);
+        blockedNow = spinTop < 0 ? tilt > DRAW_LIMIT : neededTilt(-off0) > DRAW_LIMIT;
+        if (blockedNow && spinTop < 0) tilt = neededTilt(0);
+      }
     }
     const cosT = Math.cos(tilt);
     const sinT = Math.sin(tilt);
@@ -160,9 +185,9 @@ export function createAimView(scene, game) {
     const uz = -d.z * cosT;
     // Punto de la blanca donde apunta el taco, desplazado segun el efecto: a la derecha (-dz, dx) y hacia arriba.
     const off = 0.5 * R;
-    const wx = -d.z * spinSide * off;
+    const wx = -d.z * sideUsed() * off;
     const wy = topUsed() * off;
-    const wz = d.x * spinSide * off;
+    const wz = d.x * sideUsed() * off;
     // La punta queda donde ese eje sale de la bola, con un pequeno hueco.
     const gap = strikeT >= 0 ? 0.002 : 0.012;
     const bq = wx * ux + wy * uy + wz * uz;
@@ -236,6 +261,8 @@ export function createAimView(scene, game) {
     get spin() { return { side: spinSide, top: spinTop }; },
     // true si el taco va inclinado por una bola detras de la blanca.
     get blocked() { return blocked(); },
+    // true si la blanca esta pegada a la banda y no se puede dar efecto.
+    get noSpin() { return noSpinNow; },
     rotate(dAngle) { if (strikeT < 0) yaw += dAngle; },
     tilt(dPitch) { pitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, pitch + dPitch)); },
     setPull(p) { if (strikeT < 0) pull = Math.max(0, Math.min(1, p)); },
@@ -272,7 +299,7 @@ export function createAimView(scene, game) {
         strikeT -= dt;
         if (strikeT < 0) {
           const d = dir();
-          const ok = game.shoot(d.x, d.z, strikePower, spinSide, topUsed());
+          const ok = game.shoot(d.x, d.z, strikePower, sideUsed(), topUsed());
           if (ok && onStrike) onStrike(strikePower);
         }
       }

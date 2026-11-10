@@ -2,25 +2,26 @@
 
 import * as THREE from 'three';
 import { DT, BED_Y, R } from './physics/constants.js';
-import { buildTable, TABLE_OUT_X, TABLE_OUT_Z } from './render/tableMesh.js?v=14';
-import { buildBalls } from './render/ballsMesh.js?v=14';
+import { buildTable, TABLE_OUT_X, TABLE_OUT_Z, TABLE_TOP_Y } from './render/tableMesh.js?v=15';
+import { buildBalls } from './render/ballsMesh.js?v=15';
 import { createGame } from './game/match.js';
-import { remaining } from './rules/eightball.js';
-import { createWalker } from './player/walk.js?v=14';
-import { createAimView } from './player/aimView.js?v=14';
-import { createDesktopInput } from './player/input.js?v=14';
-import { createHud } from './ui/hud.js?v=14';
-import { buildRoom } from './render/room.js?v=14';
-import { setupLighting } from './render/lighting.js?v=14';
-import { createTouchControls } from './player/touch.js?v=14';
-import { mergeStatic } from './render/props.js?v=14';
+import { remaining, blackTarget } from './rules/eightball.js';
+import { POCKETS } from './physics/table.js';
+import { createWalker } from './player/walk.js?v=15';
+import { createAimView } from './player/aimView.js?v=15';
+import { createDesktopInput } from './player/input.js?v=15';
+import { createHud } from './ui/hud.js?v=15';
+import { buildRoom } from './render/room.js?v=15';
+import { setupLighting } from './render/lighting.js?v=15';
+import { createTouchControls } from './player/touch.js?v=15';
+import { mergeStatic } from './render/props.js?v=15';
 import { chooseShot, choosePlacement } from './game/ai.js';
-import { soloRemaining } from './rules/solo.js';
+import { soloRemaining, soloBlackTarget } from './rules/solo.js';
 import { findFreeSpot } from './physics/simulate.js';
-import { createOnline } from './net/online.js?v=14';
-import { createMenus } from './ui/menus.js?v=14';
-import { loadSettings, saveSettings } from './ui/settings.js?v=14';
-import { createSound } from './audio/sound.js?v=14';
+import { createOnline } from './net/online.js?v=15';
+import { createMenus } from './ui/menus.js?v=15';
+import { loadSettings, saveSettings } from './ui/settings.js?v=15';
+import { createSound } from './audio/sound.js?v=15';
 
 const canvas = document.getElementById('view');
 const uiRoot = document.getElementById('ui');
@@ -57,8 +58,43 @@ scene.add(tableGroup);
 // Sala y mesa no se mueven: se funden por material para dibujarlas en muchas menos llamadas.
 const merged = { room: mergeStatic(room.group), table: mergeStatic(tableGroup) };
 const balls = buildBalls();
+// Aro verde sobre la tronera donde tiene que entrar la negra.
+const pocketMark = new THREE.Mesh(
+  new THREE.RingGeometry(0.072, 0.082, 40),
+  new THREE.MeshBasicMaterial({ color: '#35e08f', transparent: true, opacity: 0.85, depthWrite: false, toneMapped: false }),
+);
+pocketMark.rotation.x = -Math.PI / 2;
+pocketMark.renderOrder = 3;
+pocketMark.visible = false;
+scene.add(pocketMark);
+let markedPocket = null;
+function updatePocketMark(now) {
+  const m = game.match;
+  let k = null;
+  if (m.phase !== 'over') k = m.mode === 'solo' ? soloBlackTarget(m) : blackTarget(m, m.turn);
+  if (k === undefined) k = null;
+  if (k !== null && k !== markedPocket && game.state !== 'rolling') hud.toast('La negra, a la tronera marcada en verde', 3600);
+  markedPocket = k;
+  pocketMark.visible = k !== null;
+  if (!pocketMark.visible) return;
+  const p = POCKETS[k];
+  pocketMark.position.set(p.x, TABLE_TOP_Y + 0.002, p.z);
+  pocketMark.material.opacity = 0.55 + 0.35 * Math.sin(now * 0.005);
+}
 scene.add(balls.group);
 lighting.captureEnvironment([balls.group]);
+
+// Prepara todos los sombreadores al cargar, tambien los de objetos que aun no se ven (taco, guia, marcas).
+// Asi la primera vez que aparecen no hay un tiron mientras el navegador los compila.
+function warmShaders() {
+  const hidden = [];
+  scene.traverse((o) => { if (!o.visible) { hidden.push(o); o.visible = true; } });
+  try {
+    renderer.compile(scene, camera);
+  } finally {
+    for (const o of hidden) o.visible = false;
+  }
+}
 
 // ---------- Partida y jugador ----------
 const settings = loadSettings();
@@ -206,6 +242,13 @@ game.onEvent((e) => {
 });
 balls.onHit((speed) => sound.handle({ type: 'pocketHit', speed }));
 game.onChange(() => {
+  // Tras cada tiro el efecto vuelve al centro.
+  if (game.state === 'rolling' && lastState !== 'rolling') {
+    spin.side = 0;
+    spin.top = 0;
+    aimView.setSpin(0, 0);
+    hud.setSpin(0, 0);
+  }
   if (game.state === 'rolling' && mode === 'aim') leaveAim();
   else if (mode === 'aim' && game.state !== lastState) startBlend();
   if (lastState === 'rolling' && game.state !== 'rolling' && game.match.lastResult && game.match.lastResult.message) hud.toast(game.match.lastResult.message);
@@ -241,7 +284,8 @@ function closeMenu() {
   if (!isTouch && mode === 'walk') input.lock();
 }
 
-function startOnline(names) {
+function startOnline(names, blackPocket = settings.blackPocket) {
+  game.options.blackPocket = blackPocket;
   net.active = true;
   net.shots = 0;
   net.shooter = false;
@@ -319,12 +363,12 @@ function applyRemote(m) {
       if (net.me === 0 && !net.active) {
         const names = [net.name, String(m.name || 'Rival').slice(0, 14)];
         if (names[0] === names[1]) names[1] += ' 2';
-        say({ t: 'start', names });
+        say({ t: 'start', names, bp: settings.blackPocket });
         startOnline(names);
       }
       break;
     case 'start':
-      if (net.me === 1 && Array.isArray(m.names)) startOnline([String(m.names[0]).slice(0, 14), String(m.names[1]).slice(0, 16)]);
+      if (net.me === 1 && Array.isArray(m.names)) startOnline([String(m.names[0]).slice(0, 14), String(m.names[1]).slice(0, 16)], !!m.bp);
       break;
     case 'place':
       if (net.active && !myTurn() && game.state === 'placing' && game.isLegalPlacement(m.x, m.z)) {
@@ -514,6 +558,7 @@ const menus = createMenus(menuRoot, settings, {
     ai.stage = 'idle';
     ai.t = 0;
     sound.unlock();
+    game.options.blackPocket = settings.blackPocket;
     game.restart([name, name === 'Máquina' ? 'Máquina 2' : 'Máquina'], 'duel');
     resetPlayer();
     startBlend();
@@ -524,6 +569,7 @@ const menus = createMenus(menuRoot, settings, {
     endOnline();
     ai.on = false;
     sound.unlock();
+    game.options.blackPocket = settings.blackPocket;
     game.restart([name], 'solo');
     resetPlayer();
     startBlend();
@@ -534,6 +580,7 @@ const menus = createMenus(menuRoot, settings, {
     endOnline();
     ai.on = false;
     sound.unlock();
+    game.options.blackPocket = settings.blackPocket;
     game.restart(names, 'duel');
     resetPlayer();
     startBlend(); // la camara baja desde la vista de portada hasta el jugador
@@ -644,6 +691,7 @@ function updateHud() {
       : m.players.map((p, i) => ({ name: net.active && i === net.me ? `${p.name} (tú)` : p.name, group: p.group, left: remaining(m, i) })),
     spin: settings.spin,
     noDraw: mode === 'aim' && aimView.blocked,
+    noSpin: mode === 'aim' && aimView.noSpin,
     canAct: canAct(),
     actLabel: game.state === 'placing' ? 'Colocar blanca' : 'Tirar',
     canPlace: game.canPlace() && myTurn() && !aiTurn(),
@@ -652,12 +700,33 @@ function updateHud() {
   });
 }
 
+// Contador de fotogramas por segundo, opcional en Ajustes.
+const fpsBox = document.createElement('div');
+fpsBox.className = 'fps';
+fpsBox.hidden = true;
+uiRoot.appendChild(fpsBox);
+const fpsMeter = { t: 0, n: 0, worst: 0 };
+function updateFps(dt) {
+  fpsBox.hidden = !settings.showFps;
+  if (!settings.showFps) return;
+  fpsMeter.t += dt;
+  fpsMeter.n++;
+  fpsMeter.worst = Math.max(fpsMeter.worst, dt);
+  if (fpsMeter.t >= 0.5) {
+    fpsBox.textContent = `${Math.round(fpsMeter.n / fpsMeter.t)} fps · peor ${Math.round(fpsMeter.worst * 1000)} ms · ${lighting.quality}`;
+    fpsMeter.t = 0;
+    fpsMeter.n = 0;
+    fpsMeter.worst = 0;
+  }
+}
+
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min((now - lastT) / 1000, 0.1);
   lastT = now;
   pumpNet(now);
   watchPerformance(dt);
+  updateFps(dt);
   if (!paused) {
     acc += dt;
     let n = 0;
@@ -719,6 +788,7 @@ function frame(now) {
   }
   sound.roll(rolling);
   balls.sync(game.table, paused ? 0 : dt);
+  updatePocketMark(now);
   updateHud();
   lighting.render(game.state === 'rolling' || game.state === 'placing' || aimView.active);
 }
@@ -746,6 +816,7 @@ document.addEventListener('visibilitychange', () => {
 
 applySettings();
 checkOrientation();
+warmShaders();
 openMenu('inicio');
 
 // Acceso para depurar desde la consola.

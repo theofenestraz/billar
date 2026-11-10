@@ -555,3 +555,42 @@ export function makeFeltTextures() {
   }
   return { map: toTexture(c, 2, 2), bump: toTexture(b, 2, 2, false) };
 }
+
+// Forro de goma de las troneras: gris muy oscuro con costuras verticales, mas negro hacia el fondo.
+export function makePocketLinerTexture() {
+  const w = 256;
+  const h = 128;
+  const c = canvas(w, h);
+  const g = c.getContext('2d');
+  const r = rng(515);
+  const grad = g.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, '#3a3a3e');
+  grad.addColorStop(0.35, '#202023');
+  grad.addColorStop(1, '#050506');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, w, h);
+  // Grano de la goma.
+  const img = g.getImageData(0, 0, w, h);
+  for (let i = 0; i < w * h; i++) {
+    const n = (r() - 0.5) * 14;
+    img.data[i * 4] += n;
+    img.data[i * 4 + 1] += n;
+    img.data[i * 4 + 2] += n;
+  }
+  g.putImageData(img, 0, 0);
+  // Costuras.
+  for (let k = 0; k < 6; k++) {
+    const x = (k + 0.5) * (w / 6);
+    g.fillStyle = 'rgba(0,0,0,0.55)';
+    g.fillRect(x - 1, 0, 2, h);
+    g.fillStyle = 'rgba(255,255,255,0.08)';
+    for (let y = 2; y < h; y += 7) g.fillRect(x + 2, y, 2, 3);
+  }
+  // Brillo del borde superior.
+  g.fillStyle = 'rgba(255,255,255,0.10)';
+  g.fillRect(0, 0, w, 3);
+  const t = toTexture(c);
+  t.wrapS = THREE.RepeatWrapping;
+  t.wrapT = THREE.ClampToEdgeWrapping;
+  return t;
+}
