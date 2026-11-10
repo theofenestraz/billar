@@ -3,7 +3,7 @@
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { makeFoosballFieldTexture, makeSnackMachineTexture, makeCoffeeMachineTexture } from './textures.js?v=24';
+import { makeFoosballFieldTexture, makeSnackMachineTexture, makeCoffeeMachineTexture } from './textures.js?v=25';
 
 const std = (o) => new THREE.MeshStandardMaterial({ envMapIntensity: 0.15, ...o });
 const unlit = (o) => new THREE.MeshBasicMaterial({ toneMapped: false, ...o });
