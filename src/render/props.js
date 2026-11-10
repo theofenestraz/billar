@@ -3,7 +3,7 @@
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { makeFoosballFieldTexture, makeSnackMachineTexture, makeCoffeeMachineTexture } from './textures.js?v=25';
+import { makeFoosballFieldTexture, makeSnackMachineTexture, makeCoffeeMachineTexture } from './textures.js?v=26';
 
 const std = (o) => new THREE.MeshStandardMaterial({ envMapIntensity: 0.15, ...o });
 const unlit = (o) => new THREE.MeshBasicMaterial({ toneMapped: false, ...o });
@@ -169,10 +169,20 @@ export function buildShellChair(color = '#f08a1c') {
   const seat = new THREE.CylinderGeometry(0.285, 0.26, 0.1, 24);
   seat.scale(1, 1, 0.96);
   b.add(seat, shell, 0, 0.43, 0.01);
-  // Patas finas abiertas.
-  const leg = new THREE.CylinderGeometry(0.009, 0.007, 0.42, 6);
+  // Patas finas que se abren hacia el suelo: cada una va de un punto dentro del asiento (por debajo
+  // de su cara inferior, en 0,38) hasta su pie, mas separado del centro.
+  const up = new THREE.Vector3(0, 1, 0);
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-    b.add(leg, metal, sx * 0.22, 0.2, sz * 0.2, sz * 0.16, 0, -sx * 0.16);
+    const top = new THREE.Vector3(sx * 0.14, 0.4, 0.01 + sz * 0.13);
+    const foot = new THREE.Vector3(sx * 0.24, 0, 0.01 + sz * 0.23);
+    const axis = top.clone().sub(foot);
+    const len = axis.length();
+    const leg = new THREE.CylinderGeometry(0.009, 0.007, len, 8);
+    leg.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(up, axis.normalize()));
+    const mid = top.clone().add(foot).multiplyScalar(0.5);
+    b.add(leg, metal, mid.x, mid.y, mid.z);
+    // Contera en el pie.
+    b.add(new THREE.CylinderGeometry(0.011, 0.011, 0.01, 8), metal, foot.x, 0.005, foot.z);
   }
   return b.build();
 }
