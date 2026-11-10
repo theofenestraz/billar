@@ -110,6 +110,21 @@ export function createGame(names) {
       changed();
     },
 
+    // Copia del estado completo como texto, para enviarla a otro dispositivo.
+    snapshot() {
+      return JSON.stringify({ table: game.table, match: game.match, state: game.state });
+    },
+    // Sustituye el estado por una copia recibida. Solo entre tiros.
+    adopt(text) {
+      if (game.state === 'rolling') return false;
+      const s = JSON.parse(text);
+      game.table = s.table;
+      game.match = s.match;
+      game.state = s.state;
+      changed();
+      return true;
+    },
+
     onEvent(cb) {
       eventListeners.push(cb);
     },

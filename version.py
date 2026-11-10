@@ -5,7 +5,7 @@ Los modulos de physics, rules y game no llevan sufijo porque tambien los cargan 
 import glob, os, re, sys
 
 V = sys.argv[1]
-WEB = ('src/render', 'src/player', 'src/ui', 'src/audio')
+WEB = ('src/render', 'src/player', 'src/ui', 'src/audio', 'src/net')
 files = [f for d in WEB for f in glob.glob(d + '/*.js')] + ['src/main.js']
 for f in files:
     s = open(f, encoding='utf-8').read()

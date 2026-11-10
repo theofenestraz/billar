@@ -87,3 +87,39 @@ test('match: rematch resets the table and keeps the score', () => {
   assert(g.state === 'placing' && g.match.turn === 0 && g.match.players[1].wins === 1);
   assert(g.table.balls.every((b) => !b.pocketed));
 });
+
+test('match: two games fed the same actions stay identical, and a snapshot restores state', () => {
+  const a = createGame(['A', 'B']);
+  const b = createGame(['A', 'B']);
+  for (const g of [a, b]) {
+    g.placeCue(0.13, 0.61);
+    g.shoot(-0.0721, -0.9974, 0.83);
+    settle(g);
+  }
+  assert(a.snapshot() === b.snapshot(), 'same inputs gave different states');
+  const c = createGame(['X', 'Y']);
+  assert(c.adopt(a.snapshot()) === true);
+  assert(c.snapshot() === a.snapshot() && c.match.players[0].name === 'A');
+  // La copia no comparte objetos con el original.
+  c.table.balls[0].x += 0.01;
+  assert(c.snapshot() !== a.snapshot());
+  // Tras adoptar, la partida sigue siendo jugable e identica.
+  const d = createGame(['X', 'Y']);
+  d.adopt(a.snapshot());
+  const play = (g) => {
+    if (g.state === 'placing') g.placeCue(g.table.balls[0].x, g.table.balls[0].z);
+    const ok = g.shoot(0.3, -0.954, 0.5);
+    settle(g);
+    return ok;
+  };
+  assert(play(a) === play(d));
+  assert(a.snapshot() === d.snapshot(), 'diverged after adopting a snapshot');
+});
+
+test('match: adopt is refused while balls are rolling', () => {
+  const a = createGame(['A', 'B']);
+  const snap = a.snapshot();
+  a.placeCue(0, 0.6);
+  a.shoot(0, -1, 0.5);
+  assert(a.adopt(snap) === false && a.state === 'rolling');
+});

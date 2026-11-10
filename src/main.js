@@ -2,20 +2,21 @@
 
 import * as THREE from 'three';
 import { DT, BED_Y, R } from './physics/constants.js';
-import { buildTable, TABLE_OUT_X, TABLE_OUT_Z } from './render/tableMesh.js?v=6';
-import { buildBalls } from './render/ballsMesh.js?v=6';
+import { buildTable, TABLE_OUT_X, TABLE_OUT_Z } from './render/tableMesh.js?v=7';
+import { buildBalls } from './render/ballsMesh.js?v=7';
 import { createGame } from './game/match.js';
 import { remaining } from './rules/eightball.js';
-import { createWalker } from './player/walk.js?v=6';
-import { createAimView } from './player/aimView.js?v=6';
-import { createDesktopInput } from './player/input.js?v=6';
-import { createHud } from './ui/hud.js?v=6';
-import { buildRoom } from './render/room.js?v=6';
-import { setupLighting } from './render/lighting.js?v=6';
-import { createTouchControls } from './player/touch.js?v=6';
-import { createMenus } from './ui/menus.js?v=6';
-import { loadSettings, saveSettings } from './ui/settings.js?v=6';
-import { createSound } from './audio/sound.js?v=6';
+import { createWalker } from './player/walk.js?v=7';
+import { createAimView } from './player/aimView.js?v=7';
+import { createDesktopInput } from './player/input.js?v=7';
+import { createHud } from './ui/hud.js?v=7';
+import { buildRoom } from './render/room.js?v=7';
+import { setupLighting } from './render/lighting.js?v=7';
+import { createTouchControls } from './player/touch.js?v=7';
+import { createOnline } from './net/online.js?v=7';
+import { createMenus } from './ui/menus.js?v=7';
+import { loadSettings, saveSettings } from './ui/settings.js?v=7';
+import { createSound } from './audio/sound.js?v=7';
 
 const canvas = document.getElementById('view');
 const uiRoot = document.getElementById('ui');
@@ -75,7 +76,35 @@ function startBlend() {
   blend.t = 0;
 }
 
-const canAct = () => (game.state === 'aiming' || game.state === 'placing') && walker.distanceToTable() < 1.5;
+// ---------- En linea ----------
+// Los dos dispositivos simulan la misma fisica: solo se envian las acciones de quien tira.
+// me: 0 quien crea la sala, 1 quien se une. shots cuenta los tiros para descartar copias de estado viejas.
+const net = { link: null, active: false, me: 0, name: '', shots: 0, shooter: false, applying: false, inbox: [], sent: { x: 0, z: 0, t: 0 } };
+const myTurn = () => !net.active || game.match.turn === net.me;
+const say = (msg) => { if (net.link) net.link.send(msg); };
+
+// Las acciones propias se envian al rival; las del rival no se pueden hacer desde aqui.
+for (const [fn, build] of [
+  ['shoot', (a) => ({ t: 'shot', dx: a[0], dz: a[1], p: a[2] })],
+  ['placeCue', (a) => ({ t: 'confirm', x: a[0], z: a[1] })],
+  ['startPlacing', () => ({ t: 'replace' })],
+]) {
+  const orig = game[fn];
+  game[fn] = (...a) => {
+    if (net.active && !net.applying && !myTurn()) return false;
+    const ok = orig(...a);
+    if (ok && net.active) {
+      if (fn === 'shoot') net.shots++;
+      if (!net.applying) {
+        if (fn === 'shoot') net.shooter = true;
+        say(build(a));
+      }
+    }
+    return ok;
+  };
+}
+
+const canAct = () => (game.state === 'aiming' || game.state === 'placing') && myTurn() && walker.distanceToTable() < 1.5;
 
 function enterAim() {
   if (mode !== 'walk' || paused || !canAct()) return;
@@ -101,6 +130,11 @@ game.onChange(() => {
   if (game.state === 'rolling' && mode === 'aim') leaveAim();
   else if (mode === 'aim' && game.state !== lastState) startBlend();
   if (lastState === 'rolling' && game.state !== 'rolling' && game.match.lastResult) hud.toast(game.match.lastResult.message);
+  // Quien ha tirado envia como ha quedado todo, por si los dos dispositivos difieren en algo.
+  if (lastState === 'rolling' && game.state !== 'rolling' && net.active && net.shooter) {
+    net.shooter = false;
+    say({ t: 'state', n: net.shots, s: game.snapshot() });
+  }
   if (game.state === 'over' && lastState !== 'over') {
     // Deja ver el final del tiro antes de mostrar el resultado.
     clearTimeout(endTimer);
@@ -126,6 +160,136 @@ function closeMenu() {
   lastT = performance.now();
   acc = 0;
   if (!isTouch && mode === 'walk') input.lock();
+}
+
+function startOnline(names) {
+  net.active = true;
+  net.shots = 0;
+  net.shooter = false;
+  sound.unlock();
+  game.restart(names);
+  resetPlayer();
+  startBlend();
+  closeMenu();
+  hud.toast(net.me === 0 ? 'Sacas tú' : `Saca ${names[0]}`);
+}
+
+function endOnline() {
+  if (net.link) net.link.close();
+  net.link = null;
+  net.active = false;
+  net.inbox.length = 0;
+}
+
+const NET_ERRORS = {
+  notfound: 'No hay ninguna sala con ese código',
+  network: 'Fallo de conexión. Inténtalo otra vez',
+  script: 'No se ha podido cargar la conexión. Comprueba tu internet',
+  closed: 'Se ha cerrado la conexión',
+};
+
+function openLink() {
+  endOnline();
+  const link = createOnline({
+    onReady(code) {
+      if (net.link === link) menus.status('Esperando a tu rival…', code);
+    },
+    onConnected(role) {
+      if (net.link !== link) return;
+      net.me = role === 'host' ? 0 : 1;
+      if (role === 'guest') say({ t: 'hello', name: net.name });
+    },
+    onMessage(msg) {
+      if (net.link === link) net.inbox.push(msg);
+    },
+    onClosed(reason) {
+      if (net.link !== link) return;
+      const playing = net.active;
+      net.link = null;
+      net.active = false;
+      net.inbox.length = 0;
+      if (playing) {
+        clearTimeout(endTimer);
+        if (mode === 'aim') leaveAim();
+        openMenu('inicio');
+        menus.status('Tu rival se ha desconectado');
+      } else menus.status(NET_ERRORS[reason] || NET_ERRORS.network);
+    },
+  });
+  net.link = link;
+  return link;
+}
+
+function applyRemote(m) {
+  const cue = game.table.balls[0];
+  switch (m.t) {
+    case 'hello':
+      if (net.me === 0 && !net.active) {
+        const names = [net.name, String(m.name || 'Rival').slice(0, 14)];
+        if (names[0] === names[1]) names[1] += ' 2';
+        say({ t: 'start', names });
+        startOnline(names);
+      }
+      break;
+    case 'start':
+      if (net.me === 1 && Array.isArray(m.names)) startOnline([String(m.names[0]).slice(0, 14), String(m.names[1]).slice(0, 16)]);
+      break;
+    case 'place':
+      if (net.active && !myTurn() && game.state === 'placing' && game.isLegalPlacement(m.x, m.z)) {
+        cue.x = m.x;
+        cue.z = m.z;
+      }
+      break;
+    case 'confirm':
+      if (net.active && !myTurn()) game.placeCue(m.x, m.z);
+      break;
+    case 'replace':
+      if (net.active && !myTurn()) game.startPlacing();
+      break;
+    case 'shot':
+      if (net.active && !myTurn() && game.shoot(m.dx, m.dz, m.p)) sound.cue(m.p);
+      break;
+    case 'state':
+      // Vale si es al menos tan reciente como lo que hay aqui. Tambien recupera un tiro que se haya perdido.
+      if (net.active && m.n >= net.shots && typeof m.s === 'string') {
+        net.shots = m.n;
+        if (m.s !== game.snapshot()) game.adopt(m.s);
+      }
+      break;
+    case 'rematch':
+    case 'restart':
+      if (!net.active) break;
+      clearTimeout(endTimer);
+      net.shots = 0;
+      if (m.t === 'rematch') game.rematch();
+      else game.restart();
+      resetPlayer();
+      if (menus.open) closeMenu();
+      hud.toast(`Saca ${game.match.players[game.match.turn].name}`);
+      break;
+    default:
+  }
+}
+
+// Aplica los mensajes del rival en orden. Mientras ruedan las bolas esperan, para no adelantarse al tiro.
+function pumpNet(now) {
+  while (net.inbox.length && game.state !== 'rolling') {
+    const m = net.inbox.shift();
+    net.applying = true;
+    try {
+      applyRemote(m);
+    } finally {
+      net.applying = false;
+    }
+  }
+  // Mientras coloco la blanca, el rival la ve moverse.
+  if (net.active && myTurn() && game.state === 'placing') {
+    const cue = game.table.balls[0];
+    if ((cue.x !== net.sent.x || cue.z !== net.sent.z) && now - net.sent.t > 70) {
+      net.sent = { x: cue.x, z: cue.z, t: now };
+      say({ t: 'place', x: cue.x, z: cue.z });
+    }
+  }
 }
 
 function showEnd() {
@@ -230,7 +394,17 @@ const menuRoot = document.createElement('div');
 menuRoot.className = 'menu-root';
 uiRoot.appendChild(menuRoot);
 const menus = createMenus(menuRoot, settings, {
+  onHost(name) {
+    net.name = name;
+    openLink().host();
+  },
+  onJoin(name, code) {
+    net.name = name;
+    openLink().join(code);
+  },
+  onOnlineCancel: endOnline,
   onStart(names) {
+    endOnline();
     sound.unlock();
     game.restart(names);
     resetPlayer();
@@ -241,12 +415,14 @@ const menus = createMenus(menuRoot, settings, {
   onResume: closeMenu,
   onRestart() {
     clearTimeout(endTimer);
+    if (net.active) { say({ t: 'restart' }); net.shots = 0; }
     game.restart();
     resetPlayer();
     closeMenu();
     hud.toast(`Saca ${game.match.players[0].name}`);
   },
   onRematch() {
+    if (net.active) { say({ t: 'rematch' }); net.shots = 0; }
     game.rematch();
     resetPlayer();
     closeMenu();
@@ -254,6 +430,7 @@ const menus = createMenus(menuRoot, settings, {
   },
   onQuit() {
     clearTimeout(endTimer);
+    endOnline();
     openMenu('inicio');
   },
   onSettings(s) {
@@ -322,16 +499,17 @@ function updateHud() {
   let hint = '';
   if (mode === 'walk' && !isTouch && !input.locked) hint = 'Haz clic para mirar alrededor';
   else if (mode === 'aim' && game.state === 'aiming' && !isTouch) hint = 'Arrastra para apuntar · Espacio o la barra para dar fuerza';
+  if (net.active && !myTurn() && (game.state === 'aiming' || game.state === 'placing')) hint = `Turno de ${m.players[m.turn].name}. Espera su tiro`;
   hud.update({
     mode,
     touch: isTouch,
     state: game.state,
     turn: m.turn,
     over: m.phase === 'over',
-    players: m.players.map((p, i) => ({ name: p.name, group: p.group, left: remaining(m, i) })),
+    players: m.players.map((p, i) => ({ name: net.active && i === net.me ? `${p.name} (tú)` : p.name, group: p.group, left: remaining(m, i) })),
     canAct: canAct(),
     actLabel: game.state === 'placing' ? 'Colocar blanca' : 'Tirar',
-    canPlace: game.canPlace(),
+    canPlace: game.canPlace() && myTurn(),
     kitchen: m.ballInHand === 'kitchen',
     hint,
   });
@@ -341,6 +519,7 @@ function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min((now - lastT) / 1000, 0.1);
   lastT = now;
+  pumpNet(now);
   if (!paused) {
     acc += dt;
     let n = 0;
@@ -417,4 +596,4 @@ checkOrientation();
 openMenu('inicio');
 
 // Acceso para depurar desde la consola.
-window.__billar = { settings, menus, pause, room, lighting, game, walker, aimView, camera, scene, renderer, get mode() { return mode; }, enterAim, leaveAim };
+window.__billar = { net, pumpNet, settings, menus, pause, room, lighting, game, walker, aimView, camera, scene, renderer, get mode() { return mode; }, enterAim, leaveAim };

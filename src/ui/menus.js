@@ -10,13 +10,14 @@ const SCREENS = {
       <button class="item" data-go="reglas"><span>Reglas</span><small>Bola 8, versión de bar</small></button>
       <button class="item" data-go="ayuda"><span>Controles</span><small>Cómo moverte y tirar</small></button>
       <button class="item" data-go="ajustes"><span>Ajustes</span><small>Gráficos, sonido y sensibilidad</small></button>
-    </nav>`,
+    </nav>
+    <p class="status"></p>`,
   modo: `
     <p class="kicker">Multijugador</p>
     <h2>¿Cómo queréis jugar?</h2>
     <nav class="list">
       <button class="item" data-go="local"><span>En este dispositivo</span><small>Dos jugadores, por turnos, en la misma pantalla</small></button>
-      <button class="item" disabled><span>En línea <em class="tag">Próximamente</em></span><small>Cada uno desde su dispositivo. Todavía no está disponible</small></button>
+      <button class="item" data-go="online"><span>En línea</span><small>Cada uno desde su dispositivo, con un código de sala</small></button>
     </nav>
     <button class="btn ghost" data-act="back">Volver</button>`,
   local: `
@@ -27,6 +28,29 @@ const SCREENS = {
     <p class="sub">Saca el jugador 1. Os vais pasando el dispositivo en cada turno.</p>
     <button class="btn primary" data-act="start">Empezar partida</button>
     <button class="btn ghost" data-act="back">Volver</button>`,
+  online: `
+    <p class="kicker">En línea</p>
+    <h2>Jugar a distancia</h2>
+    <label>Tu nombre <input class="myname" maxlength="14" autocomplete="off"></label>
+    <nav class="list">
+      <button class="item" data-act="host"><span>Crear sala</span><small>Te da un código para pasárselo a tu rival</small></button>
+      <button class="item" data-go="unirse"><span>Unirse a una sala</span><small>Con el código que te han pasado</small></button>
+    </nav>
+    <button class="btn ghost" data-act="back">Volver</button>`,
+  crear: `
+    <p class="kicker">Tu sala</p>
+    <h2>Código de la sala</h2>
+    <p class="code">····</p>
+    <p class="sub">Pásale este código a tu rival. La partida empieza sola cuando entre, y sacas tú.</p>
+    <p class="status">Creando la sala…</p>
+    <button class="btn ghost" data-act="cancel-online">Cancelar</button>`,
+  unirse: `
+    <p class="kicker">Unirse</p>
+    <h2>Escribe el código</h2>
+    <input class="codein" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCD" aria-label="Código de la sala">
+    <p class="status"></p>
+    <button class="btn primary" data-act="join">Entrar</button>
+    <button class="btn ghost" data-act="cancel-online">Volver</button>`,
   reglas: `
     <p class="kicker">Reglas</p>
     <h2>Bola 8</h2>
@@ -97,6 +121,9 @@ export function createMenus(root, settings, handlers) {
   const trail = []; // pantallas anteriores, para Volver
   let cover = false; // la portada y lo que cuelga de ella
   const names = ['Jugador 1', 'Jugador 2'];
+  let myName = 'Jugador';
+  try { myName = localStorage.getItem('billar.nombre') || myName; } catch (e) { /* sin almacenamiento */ }
+  const ownName = () => myName.trim() || 'Jugador';
 
   function render(name, data) {
     current = name;
@@ -108,6 +135,17 @@ export function createMenus(root, settings, handlers) {
         inp.value = names[Number(inp.dataset.i)];
         inp.addEventListener('input', () => { names[Number(inp.dataset.i)] = inp.value; });
       });
+    } else if (name === 'online') {
+      const inp = card.querySelector('.myname');
+      inp.value = myName;
+      inp.addEventListener('input', () => {
+        myName = inp.value;
+        try { localStorage.setItem('billar.nombre', myName); } catch (e) { /* sin almacenamiento */ }
+      });
+    } else if (name === 'unirse') {
+      const inp = card.querySelector('.codein');
+      inp.addEventListener('input', () => { inp.value = inp.value.toUpperCase().replace(/[^A-Z]/g, ''); });
+      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') card.querySelector('[data-act="join"]').click(); });
     } else if (name === 'ajustes') {
       card.querySelectorAll('[data-key]').forEach((inp) => {
         const key = inp.dataset.key;
@@ -140,6 +178,26 @@ export function createMenus(root, settings, handlers) {
         handlers.onStart(clean);
         break;
       }
+      case 'host':
+        trail.push(current);
+        render('crear');
+        handlers.onHost(ownName());
+        break;
+      case 'join': {
+        const code = card.querySelector('.codein').value;
+        if (code.length < 4) {
+          card.querySelector('.status').textContent = 'El código tiene cuatro letras';
+          break;
+        }
+        b.disabled = true;
+        card.querySelector('.status').textContent = 'Conectando…';
+        handlers.onJoin(ownName(), code);
+        break;
+      }
+      case 'cancel-online':
+        handlers.onOnlineCancel();
+        render(trail.pop() || 'inicio');
+        break;
       case 'resume': handlers.onResume(); break;
       case 'restart': handlers.onRestart(); break;
       case 'rematch': handlers.onRematch(); break;
@@ -160,6 +218,15 @@ export function createMenus(root, settings, handlers) {
       wrap.dataset.cover = cover ? '1' : '0';
       render(name, data);
       wrap.hidden = false;
+    },
+    // Escribe en la linea de estado de la pantalla actual, y el codigo de sala si se da.
+    status(text, code) {
+      const st = card.querySelector('.status');
+      if (st) st.textContent = text;
+      const cd = card.querySelector('.code');
+      if (cd && code) cd.textContent = code;
+      const join = card.querySelector('[data-act="join"]');
+      if (join) join.disabled = false;
     },
     hide() {
       wrap.hidden = true;
