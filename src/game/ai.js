@@ -2,7 +2,10 @@
 // Busca tiros de tronera con la bola fantasma, los comprueba simulandolos y apunta con un pequeno error.
 // No toca la pantalla ni la partida real: recibe copias y devuelve decisiones.
 
-import { R, HALF_W, HALF_L, cueSpeed } from '../physics/constants.js';
+import { R, HALF_W, HALF_L, cueSpeed, POWER_SCALE } from '../physics/constants.js';
+
+// La fuerza se calculo con la barra antigua: se corrige para pedir la misma velocidad con la nueva.
+const RESCALE = 1 / Math.sqrt(POWER_SCALE);
 import { POCKETS } from '../physics/table.js';
 import { simulateShot, isLegalCuePosition, findFreeSpot } from '../physics/simulate.js';
 import { groupOf, summarizeShot, applyShot, blackTarget } from '../rules/eightball.js';
@@ -77,7 +80,7 @@ function candidates(table, match, cx, cz) {
       if (cos < MAX_CUT_COS) continue;
       if (!pathClear(table, cx, cz, gx, gz, 0, ball.id)) continue;
       if (!pathClear(table, ball.x, ball.z, p.x, p.z, 0, ball.id)) continue;
-      const power = Math.max(0.24, Math.min(0.8, 0.2 + (0.17 * (d1 + d2)) / cos));
+      const power = Math.min(0.95, RESCALE * Math.max(0.24, Math.min(0.8, 0.2 + (0.17 * (d1 + d2)) / cos)));
       out.push({ dirX, dirZ, power, ball: ball.id, score: (cos * cos) / (1 + 0.6 * d1 + 0.9 * d2) });
     }
   }
@@ -113,7 +116,7 @@ export function chooseShot(table, match, rand = Math.random) {
   if (match.phase === 'break') {
     const apex = table.balls[1];
     const d = Math.hypot(apex.x - cue.x, apex.z - cue.z);
-    return withError({ dirX: (apex.x - cue.x) / d, dirZ: (apex.z - cue.z) / d, power: 0.9 }, rand);
+    return withError({ dirX: (apex.x - cue.x) / d, dirZ: (apex.z - cue.z) / d, power: 1 }, rand);
   }
   const list = candidates(table, match, cue.x, cue.z);
   let safe = null;

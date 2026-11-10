@@ -17,14 +17,16 @@ export const V_REST = 0.005; // por debajo de esta velocidad la bola se detiene
 export const MIN_CUE_SPEED = 0.3;
 export const MAX_CUE_SPEED = 9;
 export const TOP_BOOST = 1.5; // extra solo en lo mas alto de la barra, para el saque
+// Toda la barra de fuerza da el 75 % de lo que daba antes (pedido por el usuario el 2026-11-10).
+export const POWER_SCALE = 0.75;
 
-// Velocidad de la blanca segun la fuerza elegida (0 a 1). Los tiros normales no cambian:
-// el termino p^8 solo pesa cerca del maximo, que llega a 10,5 m/s.
+// Velocidad de la blanca segun la fuerza elegida (0 a 1). El termino p^8 solo pesa cerca del
+// maximo, que llega a 0,75 x 10,5 = 7,875 m/s.
 export function cueSpeed(p) {
   const q = p < 0 ? 0 : p > 1 ? 1 : p;
   const q2 = q * q;
   const q8 = q2 * q2 * q2 * q2;
-  return MIN_CUE_SPEED + q2 * (MAX_CUE_SPEED - MIN_CUE_SPEED) + q8 * TOP_BOOST;
+  return POWER_SCALE * (MIN_CUE_SPEED + q2 * (MAX_CUE_SPEED - MIN_CUE_SPEED) + q8 * TOP_BOOST);
 }
 export const MAX_STEPS = 240 * 45; // limite de duracion de un tiro
 

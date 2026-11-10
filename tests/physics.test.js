@@ -256,8 +256,8 @@ test('break: at full power the whole rack opens, not just the corner balls', () 
   }
 });
 
-test('break: the top of the power bar is stronger, the middle is unchanged', () => {
-  assert(Math.abs(cueSpeed(1) - 10.5) < 1e-9);
-  assert(Math.abs(cueSpeed(0.5) - (0.3 + 0.25 * 8.7)) < 0.01);
+test('power bar: full power is 75% of the old 10.5 m/s, the whole bar scales the same', () => {
+  assert(Math.abs(cueSpeed(1) - 0.75 * 10.5) < 1e-9);
+  assert(Math.abs(cueSpeed(0.5) - 0.75 * (0.3 + 0.25 * 8.7)) < 0.01);
   for (let p = 0; p < 1; p += 0.05) assert(cueSpeed(p + 0.05) > cueSpeed(p), 'not increasing');
 });
