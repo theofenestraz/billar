@@ -3,14 +3,13 @@
 const SCREENS = {
   // Portada: menu a la izquierda, la mesa se ve a la derecha.
   inicio: `
-    <p class="kicker">Bola 8 · Primera persona</p>
-    <h1 class="title">Billar</h1>
+    <h1 class="title">Billiard Masters</h1>
     <nav class="list">
-      <button class="item" data-go="unjugador"><span>Un jugador</span><small>Contra la máquina o práctica en solitario</small></button>
-      <button class="item" data-go="modo"><span>Multijugador</span><small>Elige cómo jugar con tus amigos</small></button>
-      <button class="item" data-go="reglas"><span>Reglas</span><small>Bola 8, versión de bar</small></button>
-      <button class="item" data-go="ayuda"><span>Controles</span><small>Cómo moverte y tirar</small></button>
-      <button class="item" data-go="ajustes"><span>Ajustes</span><small>Gráficos, sonido y sensibilidad</small></button>
+      <button class="item" data-go="unjugador"><span>Un jugador</span></button>
+      <button class="item" data-go="modo"><span>Multijugador</span></button>
+      <button class="item" data-go="reglas"><span>Reglas</span></button>
+      <button class="item" data-go="ayuda"><span>Controles</span></button>
+      <button class="item" data-go="ajustes"><span>Ajustes</span></button>
     </nav>
     <p class="status"></p>`,
   unjugador: `
