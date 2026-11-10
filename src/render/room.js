@@ -133,20 +133,20 @@ export function buildRoom() {
   block(W - 0.2, W, 0, WIN.y0, WIN.z0, WIN.z1, wallDark, { cast: false });
   block(W - 0.2, W, WIN.y1, H, WIN.z0, WIN.z1, wallDark, { cast: false });
   block(W - 0.2, W, 0, H, N, WIN.z0, wallDark, { cast: false });
-  // Al sur del ventanal empieza el pasillo de las maquinas: murete con cristal encima.
-  const COR = { z0: 2.9, z1: 7.6, end: 9.4, sill: 1.12, top: 2.45 };
-  block(W - 0.2, W, 0, H, WIN.z1, COR.z0, wallDark, { cast: false });
-  block(W - 0.2, W, 0, COR.sill, COR.z0, COR.z1, wallDark, { cast: false });
-  block(W - 0.22, W + 0.02, COR.sill, COR.sill + 0.03, COR.z0, COR.z1, blackMat, { cast: false });
-  block(W - 0.2, W, COR.top, H, COR.z0, COR.z1, wallDark, { cast: false });
-  block(W - 0.25, W + 0.03, 0, H, COR.z1, COR.z1 + 0.45, std({ color: '#d9d5d0', roughness: 0.85 }), { cast: false });
-  block(W - 0.2, W, 0, H, COR.z1 + 0.45, COR.end, wallDark, { cast: false });
-  collide(W - 0.2, W, N, COR.end);
-  const pane2 = new THREE.Mesh(new THREE.PlaneGeometry(COR.z1 - COR.z0, COR.top - COR.sill), glass);
-  pane2.position.set(W - 0.01, (COR.sill + COR.top) / 2, (COR.z0 + COR.z1) / 2);
-  pane2.rotation.y = Math.PI / 2;
+  // Junto al pilar la pared oeste se abre al pasillo de las maquinas, que corre hacia el oeste.
+  // Lado norte del pasillo: murete con cristal encima. Lado sur: la pared curva.
+  const COR = { n: 2.6, s: S - 0.5, glassEnd: -10.4, end: -12.6, sill: 1.12, top: 2.45 };
+  block(W - 0.2, W, 0, H, WIN.z1, COR.n, wallDark, { cast: false });
+  collide(W - 0.2, W, N, COR.n);
+  block(COR.glassEnd, W, 0, COR.sill, COR.n - 0.2, COR.n, wallDark, { cast: false });
+  block(COR.glassEnd, W, COR.sill, COR.sill + 0.03, COR.n - 0.22, COR.n + 0.02, blackMat, { cast: false });
+  block(COR.glassEnd, W, COR.top, H, COR.n - 0.2, COR.n, wallDark, { cast: false });
+  block(COR.glassEnd - 0.45, COR.glassEnd, 0, H, COR.n - 0.25, COR.n + 0.03, std({ color: '#d9d5d0', roughness: 0.85 }), { cast: false });
+  block(COR.end, COR.glassEnd - 0.45, 0, H, COR.n - 0.2, COR.n, wallDark, { cast: false });
+  const pane2 = new THREE.Mesh(new THREE.PlaneGeometry(W - COR.glassEnd, COR.top - COR.sill), glass);
+  pane2.position.set((W + COR.glassEnd) / 2, (COR.sill + COR.top) / 2, COR.n - 0.01);
   group.add(pane2);
-  for (const z of [4.45, 6.0]) block(W - 0.015, W - 0.005, COR.sill, COR.top, z - 0.006, z + 0.006, metalDark, { cast: false });
+  for (const x of [-6.05, -7.5, -8.95]) block(x - 0.006, x + 0.006, COR.sill, COR.top, COR.n - 0.015, COR.n - 0.005, metalDark, { cast: false });
   // Marco blanco del ventanal y cristales.
   block(W - 0.04, W + 0.04, WIN.y0 - 0.05, WIN.y0, WIN.z0, WIN.z1, white, { cast: false });
   block(W - 0.04, W + 0.04, WIN.y1, WIN.y1 + 0.05, WIN.z0, WIN.z1, white, { cast: false });
@@ -161,11 +161,11 @@ export function buildRoom() {
   // Sala blanca tras el ventanal, con los tubos de neon de colores.
   const whiteRoom = emissive('#ece6e2');
   const BACK = W - 2.0;
-  block(BACK - 0.1, BACK, 0.6, H, N, 3.2, whiteRoom, { cast: false });
-  block(BACK, W - 0.2, 0.7, 0.75, N, 3.2, emissive('#8f8a87'), { cast: false });
-  block(BACK, W - 0.2, H - 0.3, H - 0.25, N, 3.2, emissive('#a7a19e'), { cast: false });
+  block(BACK - 0.1, BACK, 0.6, H, N, 2.4, whiteRoom, { cast: false });
+  block(BACK, W - 0.2, 0.7, 0.75, N, 2.4, emissive('#8f8a87'), { cast: false });
+  block(BACK, W - 0.2, H - 0.3, H - 0.25, N, 2.4, emissive('#a7a19e'), { cast: false });
   block(BACK, W - 0.2, 0.6, H, N - 0.05, N, whiteRoom, { cast: false });
-  block(BACK, W - 0.2, 0.6, H, 3.2, 3.25, whiteRoom, { cast: false });
+  block(BACK, W - 0.2, 0.6, H, 2.35, 2.4, whiteRoom, { cast: false });
   const tubeColors = ['#fff6e8', '#ffd23c', '#ffb02e', '#ffe9ef', '#ff5aa8', '#ff8fd0', '#fff6e8', '#fff6e8', '#bfeaff', '#55d8ff'];
   const tubeGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.36, 8);
   tubeColors.forEach((color, col) => {
@@ -195,20 +195,22 @@ export function buildRoom() {
   block(W - 1.0, W - 0.97, 2.56, 2.59, -2.6, 1.6, blackMat, { cast: false });
   for (const z of [-2.2, -1.0, 0.2, 1.3]) block(W - 1.03, W - 0.94, 2.4, 2.56, z - 0.04, z + 0.04, blackMat, { cast: false });
 
-  // Sala de neones tras el cristal del pasillo.
+  // Sala de neones tras el cristal del pasillo, al oeste de la sala blanca.
   {
-    const B2 = W - 3.4;
+    const X0 = COR.glassEnd;
+    const X1 = BACK - 0.1;
+    const ZB = -1.0;
     const dim = emissive('#8c8789');
-    block(B2 - 0.1, B2, 0.4, H, 3.25, COR.end, dim, { cast: false });
-    block(B2, W - 0.2, 0.5, 0.55, 3.25, COR.end, emissive('#5d5a5e'), { cast: false });
-    block(B2, W - 0.2, 2.62, 2.67, 3.25, COR.end, emissive('#a39ea0'), { cast: false });
-    block(B2, W - 0.2, 0.5, H, COR.end, COR.end + 0.05, dim, { cast: false });
+    block(X0, X1, 0.4, H, ZB - 0.1, ZB, dim, { cast: false });
+    block(X0, X1, 0.5, 0.55, ZB, COR.n - 0.2, emissive('#5d5a5e'), { cast: false });
+    block(X0, X1, 2.62, 2.67, ZB, COR.n - 0.2, emissive('#a39ea0'), { cast: false });
+    block(X0 - 0.05, X0, 0.5, H, ZB, COR.n - 0.2, dim, { cast: false });
     const rackMat = new THREE.MeshBasicMaterial({ map: makeNeonRackTexture(), toneMapped: false });
     rackMat.color.multiplyScalar(1.7);
-    panel(4.4, 1.65, rackMat, W - 1.7, 1.72, 5.3, 'e');
+    panel(X1 - X0 - 0.1, 1.65, rackMat, (X0 + X1) / 2, 1.72, 1.2, 's');
     const rackFar = rackMat.clone();
     rackFar.color.multiplyScalar(0.6);
-    panel(4.4, 1.65, rackFar, W - 2.9, 1.72, 6.3, 'e');
+    panel(X1 - X0 - 0.1, 1.65, rackFar, (X0 + X1) / 2 - 0.5, 1.72, 0.1, 's');
   }
 
   // Sur: cristalera con plantas, pilar, pasillo de salida y pared curva.
@@ -264,8 +266,8 @@ export function buildRoom() {
   block(C1, 0.55, 0, H, S - 0.05, S + 0.05, wallDark, { cast: false });
   panel(0.5, 0.17, new THREE.MeshBasicMaterial({ map: makeSignTexture({ text: 'SALIDA' }), toneMapped: false }), (C0 + C1) / 2, 2.42, S - 0.06, 'n');
   collide(C0 - 0.2, 0.6, S - 0.12, S + 0.3);
-  // Pared curva del suroeste: gira hacia el sur y hace de lado este del pasillo de las maquinas.
-  const arc = [[C0, S], [-1.2, S - 0.2], [-1.75, S + 0.1], [-2.0, S + 0.7], [-2.05, S + 1.6], [-1.95, COR.end]];
+  // Pared curva del suroeste: sale de la salida, gira y sigue hacia el oeste como lado sur del pasillo.
+  const arc = [[C0, S], [-1.8, S - 0.05], [-3.0, S - 0.2], [-4.2, S - 0.4], [-5.4, COR.s], [COR.end, COR.s]];
   for (let i = 0; i < arc.length - 1; i++) {
     const [x0, z0] = arc[i];
     const [x1, z1] = arc[i + 1];
@@ -276,37 +278,37 @@ export function buildRoom() {
     m.translateZ(-0.1);
     m.receiveShadow = true;
     group.add(m);
+    if (x0 > W) collide(Math.max(W, Math.min(x0, x1)) - 0.05, Math.max(x0, x1) + 0.05, Math.min(z0, z1) - 0.05, S + 1);
   }
-  collide(-1.8, C0 + 0.05, S - 0.3, S + 1);
-  // El pasillo se ve pero no se entra.
-  collide(W, -1.7, S - 0.1, S + 0.3);
+  // El pasillo es decorativo: una pared invisible lo cierra a la altura de la pared oeste.
+  collide(W - 0.4, W, COR.n - 0.2, S + 1);
   // Fondo del pasillo y techo rebajado.
-  block(W - 0.2, -1.8, 0, H, COR.end, COR.end + 0.2, std({ color: '#3f3c45', roughness: 0.95, emissive: '#3f3c45', emissiveIntensity: 0.5 }), { cast: false });
+  block(COR.end - 0.2, COR.end, 0, H, COR.n - 0.2, COR.s + 0.2, std({ color: '#3f3c45', roughness: 0.95, emissive: '#3f3c45', emissiveIntensity: 0.5 }), { cast: false });
   const soffit = std({ color: '#4c4d50', roughness: 1, emissive: '#4c4d50', emissiveIntensity: 0.45 });
-  block(W - 0.2, -2.62, 2.5, H, 3.7, COR.end, soffit, { cast: false });
-  block(-2.62, -1.95, 2.5, H, S + 0.3, COR.end, soffit, { cast: false });
-  for (const [x, z] of [[-3.3, 4.3], [-4.0, 5.6], [-3.2, 6.6], [-4.0, 7.6], [-3.3, 8.6]]) {
+  block(COR.end, -3.75, 2.5, H, COR.n, COR.s + 0.1, soffit, { cast: false });
+  for (const [x, z] of [[-4.6, 3.4], [-5.9, 4.4], [-7.2, 3.3], [-8.5, 4.4], [-9.8, 3.4], [-11.2, 4.2]]) {
     block(x - 0.035, x + 0.035, 2.37, 2.5, z - 0.035, z + 0.035, blackMat, { cast: false });
     const lens = new THREE.Mesh(new THREE.CircleGeometry(0.026, 10), emissive('#fff3da', 4));
     lens.rotation.x = Math.PI / 2;
     lens.position.set(x, 2.366, z);
     group.add(lens);
   }
-  block(-3.9, -3.3, 2.49, 2.5, 5.0, 5.35, blackMat, { cast: false });
-  block(-3.6, -3.0, 2.49, 2.5, 7.0, 7.35, blackMat, { cast: false });
-  // Maquinas expendedoras al fondo, mirando al norte.
+  block(-6.9, -6.55, 2.49, 2.5, 3.6, 4.2, blackMat, { cast: false });
+  block(-9.4, -9.05, 2.49, 2.5, 3.5, 4.1, blackMat, { cast: false });
+  // Maquinas expendedoras al fondo, mirando al este, y mesa alta contra la pared sur.
   {
     const snack = buildVendingMachine('snack');
-    snack.position.set(-3.1, 0, COR.end - 0.4);
-    snack.rotation.y = Math.PI;
+    snack.position.set(COR.end + 0.4, 0, COR.s - 0.62);
+    snack.rotation.y = Math.PI / 2;
     const coffee = buildVendingMachine('coffee');
-    coffee.position.set(-3.93, 0, COR.end - 0.35);
-    coffee.rotation.y = Math.PI;
+    coffee.position.set(COR.end + 0.35, 0, COR.s - 1.48);
+    coffee.rotation.y = Math.PI / 2;
     const table = buildHighTable();
-    table.position.set(-2.34, 0, 8.72);
+    table.position.set(COR.end + 1.45, 0, COR.s - 0.32);
+    table.rotation.y = -Math.PI / 2;
     group.add(snack, coffee, table);
   }
-  // Senales, armario rojo, extintor y puerta sobre la pared del pasillo.
+  // Senales, armario rojo, extintor y puerta sobre la pared sur del pasillo.
   function onWall(x0, z0, x1, z1, t, build) {
     const g = new THREE.Group();
     g.position.set(x0 + (x1 - x0) * t, 0, z0 + (z1 - z0) * t);
@@ -321,30 +323,29 @@ export function buildRoom() {
   };
   const signTall = std({ map: makeSafetySignTexture({ tall: true }), roughness: 0.6 });
   const signSmall = std({ map: makeSafetySignTexture({ tall: false }), roughness: 0.6 });
-  onWall(...arc[2], ...arc[3], 0.5, (g) => {
+  onWall(...arc[3], ...arc[4], 0.5, (g) => {
     const bell = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.07, 16), red);
     bell.rotation.x = Math.PI / 2;
-    bell.position.set(0.12, 2.15, 0.05);
-    g.add(flat(0.2, 0.5, signTall, 0.12, 1.75), bell, flat(0.11, 0.22, signSmall, 0.12, 2.38));
+    bell.position.set(0, 2.15, 0.05);
+    g.add(flat(0.2, 0.5, signTall, 0, 1.75), bell, flat(0.11, 0.22, signSmall, 0, 2.38));
   });
-  onWall(...arc[3], ...arc[4], 0, (g) => {
-    const teal = new THREE.Mesh(new THREE.CircleGeometry(0.13, 24), emissive('#3db8c4'));
-    teal.position.set(0.12, 1.75, 0.012);
-    const cab = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.85, 0.16), red);
-    cab.position.set(0.58, 1.42, 0.08);
-    const call = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.04), red);
-    call.position.set(0.2, 0.78, 0.02);
-    g.add(teal, flat(0.1, 0.24, signSmall, 0.2, 2.05), flat(0.1, 0.24, signSmall, 0.36, 2.05), cab, call);
-  });
+  // Tramo recto: x local crece hacia el oeste, desde el final de la curva.
   onWall(...arc[4], ...arc[5], 0, (g) => {
+    const teal = new THREE.Mesh(new THREE.CircleGeometry(0.13, 24), emissive('#3db8c4'));
+    teal.position.set(0.4, 1.75, 0.012);
+    const cab = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.85, 0.16), red);
+    cab.position.set(1.9, 1.42, 0.08);
+    const call = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.04), red);
+    call.position.set(1.2, 0.78, 0.02);
     const ext = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.065, 0.42, 12), red);
-    ext.position.set(0.12, 0.98, 0.09);
+    ext.position.set(2.5, 0.98, 0.09);
     const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.03, 0.1, 8), blackMat);
-    neck.position.set(0.12, 1.24, 0.09);
-    const frame = flat(0.98, 2.14, std({ color: '#e6e3dc', roughness: 0.6 }), 0.78, 1.07);
-    const door = flat(0.84, 2.04, std({ color: '#cfccc5', roughness: 0.55 }), 0.78, 1.02);
+    neck.position.set(2.5, 1.24, 0.09);
+    const frame = flat(0.98, 2.14, std({ color: '#e6e3dc', roughness: 0.6 }), 3.6, 1.07);
+    const door = flat(0.84, 2.04, std({ color: '#cfccc5', roughness: 0.55 }), 3.6, 1.02);
     door.position.z = 0.016;
-    g.add(ext, neck, frame, door, flat(0.1, 0.1, emissive('#39c46a'), 1.42, 1.62));
+    g.add(teal, flat(0.1, 0.24, signSmall, 0.95, 2.05), flat(0.1, 0.24, signSmall, 1.12, 2.05), cab, call, ext, neck, frame, door,
+      flat(0.1, 0.1, emissive('#39c46a'), 4.3, 1.62));
   });
 
   // Limite del sureste: la zona de cafeteria se ve pero no se pisa.
@@ -508,15 +509,21 @@ export function buildRoom() {
   wireTable(-3.2, -0.75, 0.24, 0.42);
   wireTable(-4.0, -4.95, 0.2, 0.4);
 
-  // Sillones naranjas: uno junto al pilar y dos a la entrada del pasillo.
-  for (const [x, z, ry] of [[-4.0, 0.15, Math.PI / 2 - 0.2], [-4.0, 3.75, Math.PI / 2 - 0.15], [-3.7, 4.95, Math.PI / 2 + 0.75]]) {
+  // Sillones naranjas: uno junto al pilar y dos dentro del pasillo, de espaldas al murete.
+  for (const [x, z, ry, solid] of [[-4.0, 0.15, Math.PI / 2 - 0.2, true], [-5.6, 3.1, 0.15, false], [-6.9, 3.25, -0.55, false]]) {
     const chair = buildShellChair();
     chair.position.set(x, 0, z);
     chair.rotation.y = ry;
     group.add(chair);
-    collide(x - 0.33, x + 0.33, z - 0.33, z + 0.33);
+    if (solid) collide(x - 0.33, x + 0.33, z - 0.33, z + 0.33);
   }
-  wireTable(-4.15, 4.4, 0.17, 0.36);
+  {
+    // Mesita de rejilla entre los dos sillones del pasillo, sin colision porque no se llega.
+    const wire = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.156, 0.36, 14, 4, true), new THREE.MeshBasicMaterial({ color: '#9a9994', wireframe: true }));
+    wire.position.set(-6.3, 0.18, 3.0);
+    group.add(wire);
+    cyl(0.18, 0.02, white, -6.3, 0.37, 3.0);
+  }
 
   // Pared este: cuadro electrico, pizarra, diana, cartel, taquera, senales y mesita.
   const EW = E - 0.01;
