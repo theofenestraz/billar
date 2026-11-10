@@ -1,25 +1,60 @@
 // Menus: inicio, pausa, como se juega, ajustes y fin de partida.
 
 const SCREENS = {
+  // Portada: menu a la izquierda, la mesa se ve a la derecha.
   inicio: `
-    <h1>Billar</h1>
-    <p class="sub">Bola 8 para dos jugadores, por turnos en este dispositivo.</p>
+    <p class="kicker">Bola 8 · Primera persona</p>
+    <h1 class="title">Billar</h1>
+    <nav class="list">
+      <button class="item" data-go="modo"><span>Multijugador</span><small>Elige cómo jugar con tus amigos</small></button>
+      <button class="item" data-go="reglas"><span>Reglas</span><small>Bola 8, versión de bar</small></button>
+      <button class="item" data-go="ayuda"><span>Controles</span><small>Cómo moverte y tirar</small></button>
+      <button class="item" data-go="ajustes"><span>Ajustes</span><small>Gráficos, sonido y sensibilidad</small></button>
+    </nav>`,
+  modo: `
+    <p class="kicker">Multijugador</p>
+    <h2>¿Cómo queréis jugar?</h2>
+    <nav class="list">
+      <button class="item" data-go="local"><span>En este dispositivo</span><small>Dos jugadores, por turnos, en la misma pantalla</small></button>
+      <button class="item" disabled><span>En línea <em class="tag">Próximamente</em></span><small>Cada uno desde su dispositivo. Todavía no está disponible</small></button>
+    </nav>
+    <button class="btn ghost" data-act="back">Volver</button>`,
+  local: `
+    <p class="kicker">En este dispositivo</p>
+    <h2>¿Quién juega?</h2>
     <label>Jugador 1 <input class="name" data-i="0" maxlength="14" autocomplete="off" value="Jugador 1"></label>
     <label>Jugador 2 <input class="name" data-i="1" maxlength="14" autocomplete="off" value="Jugador 2"></label>
-    <button class="btn primary" data-act="start">Jugar</button>
-    <div class="row">
-      <button class="btn" data-go="ayuda">Cómo se juega</button>
-      <button class="btn" data-go="ajustes">Ajustes</button>
-    </div>`,
+    <p class="sub">Saca el jugador 1. Os vais pasando el dispositivo en cada turno.</p>
+    <button class="btn primary" data-act="start">Empezar partida</button>
+    <button class="btn ghost" data-act="back">Volver</button>`,
+  reglas: `
+    <p class="kicker">Reglas</p>
+    <h2>Bola 8</h2>
+    <div class="help">
+      <h3>Objetivo</h3>
+      <p>Hay siete bolas lisas, siete rayadas y la negra. Gana quien emboca todas las de su grupo y después la negra.</p>
+      <h3>Saque</h3>
+      <p>La blanca se coloca en la zona de saque, detrás de la línea. Si en el saque entra la negra, se repite el saque.</p>
+      <h3>Grupos</h3>
+      <p>Tras el saque la mesa está abierta. El primero que emboca una bola sin hacer falta se queda con ese grupo, lisas o rayadas, y el rival con el otro.</p>
+      <h3>Turno</h3>
+      <p>Si embocas una bola de tu grupo sin hacer falta, sigues tirando. Si no, pasa el turno.</p>
+      <h3>Faltas</h3>
+      <p>Es falta embocar la blanca, no tocar ninguna bola o tocar primero una que no es de tu grupo. Tras una falta, el rival tiene bola en mano y coloca la blanca donde quiera.</p>
+      <h3>La negra</h3>
+      <p>Solo puedes ir a por ella cuando no te queden bolas. Si la embocas antes de tiempo, o haces falta en el tiro en que entra, pierdes la partida.</p>
+    </div>
+    <button class="btn ghost" data-act="back">Volver</button>`,
   pausa: `
     <h2>Pausa</h2>
     <button class="btn primary" data-act="resume">Reanudar</button>
     <button class="btn" data-go="ajustes">Ajustes</button>
-    <button class="btn" data-go="ayuda">Cómo se juega</button>
+    <button class="btn" data-go="ayuda">Controles</button>
+    <button class="btn" data-go="reglas">Reglas</button>
     <button class="btn" data-act="restart">Reiniciar partida</button>
     <button class="btn" data-act="quit">Salir al inicio</button>`,
   ayuda: `
-    <h2>Cómo se juega</h2>
+    <h2>Controles</h2>
     <div class="help">
       <h3>Moverte</h3>
       <p class="only-desktop">Haz clic para mirar con el ratón. Camina con W A S D o las flechas, y mantén Mayús para ir más rápido.</p>
@@ -27,10 +62,6 @@ const SCREENS = {
       <h3>Tirar</h3>
       <p>Acércate a la mesa y pulsa <b>Tirar</b><span class="only-desktop"> (tecla E)</span>. Arrastra para apuntar y usa el ajuste fino para afinar. Baja la barra de fuerza y suéltala para golpear<span class="only-desktop">, o mantén Espacio</span>. Si la sueltas arriba del todo, no se tira.</p>
       <p>Con <b>Levantarse</b><span class="only-desktop"> (tecla Q)</span> vuelves a caminar sin tirar.</p>
-      <h3>Reglas</h3>
-      <p>El primero que emboca una bola después del saque se queda con su grupo, lisas o rayadas. Si embocas una de las tuyas, sigues tirando.</p>
-      <p>Es falta embocar la blanca, no tocar ninguna bola o tocar primero una que no es tuya. Tras una falta, el rival coloca la blanca donde quiera.</p>
-      <p>Cuando no te queden bolas, emboca la negra para ganar. Si la embocas antes de tiempo o junto con la blanca, pierdes.</p>
     </div>
     <button class="btn primary" data-act="back">Volver</button>`,
   ajustes: `
@@ -63,7 +94,8 @@ export function createMenus(root, settings, handlers) {
   root.appendChild(wrap);
   const card = wrap.querySelector('.card');
   let current = null;
-  let previous = null;
+  const trail = []; // pantallas anteriores, para Volver
+  let cover = false; // la portada y lo que cuelga de ella
   const names = ['Jugador 1', 'Jugador 2'];
 
   function render(name, data) {
@@ -71,7 +103,7 @@ export function createMenus(root, settings, handlers) {
     card.dataset.screen = name;
     card.innerHTML = SCREENS[name];
     card.scrollTop = 0;
-    if (name === 'inicio') {
+    if (name === 'local') {
       card.querySelectorAll('.name').forEach((inp) => {
         inp.value = names[Number(inp.dataset.i)];
         inp.addEventListener('input', () => { names[Number(inp.dataset.i)] = inp.value; });
@@ -98,7 +130,7 @@ export function createMenus(root, settings, handlers) {
     const b = e.target.closest('button');
     if (!b) return;
     if (b.dataset.go) {
-      previous = current;
+      trail.push(current);
       render(b.dataset.go);
       return;
     }
@@ -112,7 +144,7 @@ export function createMenus(root, settings, handlers) {
       case 'restart': handlers.onRestart(); break;
       case 'rematch': handlers.onRematch(); break;
       case 'quit': handlers.onQuit(); break;
-      case 'back': render(previous || 'inicio'); break;
+      case 'back': render(trail.pop() || 'inicio'); break;
       default:
     }
   });
@@ -120,8 +152,12 @@ export function createMenus(root, settings, handlers) {
   return {
     get open() { return !wrap.hidden; },
     get screen() { return current; },
+    // true mientras se ve la portada o una pantalla abierta desde ella.
+    get cover() { return !wrap.hidden && cover; },
     show(name, data) {
-      previous = null;
+      trail.length = 0;
+      cover = name === 'inicio';
+      wrap.dataset.cover = cover ? '1' : '0';
       render(name, data);
       wrap.hidden = false;
     },

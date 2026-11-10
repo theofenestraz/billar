@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { HALF_W, HALF_L, BED_Y, R } from '../physics/constants.js';
 import { POCKETS, CUSHIONS } from '../physics/table.js';
-import { makeNoiseTexture, makeBumpTexture } from './textures.js?v=5';
+import { makeNoiseTexture, makeBumpTexture } from './textures.js?v=6';
 
 const OUT_X = 0.685; // media anchura exterior (1,37 / 2)
 const OUT_Z = 1.18; // media longitud exterior (2,36 / 2)

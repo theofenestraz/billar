@@ -2,20 +2,20 @@
 
 import * as THREE from 'three';
 import { DT, BED_Y, R } from './physics/constants.js';
-import { buildTable, TABLE_OUT_X, TABLE_OUT_Z } from './render/tableMesh.js?v=5';
-import { buildBalls } from './render/ballsMesh.js?v=5';
+import { buildTable, TABLE_OUT_X, TABLE_OUT_Z } from './render/tableMesh.js?v=6';
+import { buildBalls } from './render/ballsMesh.js?v=6';
 import { createGame } from './game/match.js';
 import { remaining } from './rules/eightball.js';
-import { createWalker } from './player/walk.js?v=5';
-import { createAimView } from './player/aimView.js?v=5';
-import { createDesktopInput } from './player/input.js?v=5';
-import { createHud } from './ui/hud.js?v=5';
-import { buildRoom } from './render/room.js?v=5';
-import { setupLighting } from './render/lighting.js?v=5';
-import { createTouchControls } from './player/touch.js?v=5';
-import { createMenus } from './ui/menus.js?v=5';
-import { loadSettings, saveSettings } from './ui/settings.js?v=5';
-import { createSound } from './audio/sound.js?v=5';
+import { createWalker } from './player/walk.js?v=6';
+import { createAimView } from './player/aimView.js?v=6';
+import { createDesktopInput } from './player/input.js?v=6';
+import { createHud } from './ui/hud.js?v=6';
+import { buildRoom } from './render/room.js?v=6';
+import { setupLighting } from './render/lighting.js?v=6';
+import { createTouchControls } from './player/touch.js?v=6';
+import { createMenus } from './ui/menus.js?v=6';
+import { loadSettings, saveSettings } from './ui/settings.js?v=6';
+import { createSound } from './audio/sound.js?v=6';
 
 const canvas = document.getElementById('view');
 const uiRoot = document.getElementById('ui');
@@ -234,6 +234,7 @@ const menus = createMenus(menuRoot, settings, {
     sound.unlock();
     game.restart(names);
     resetPlayer();
+    startBlend(); // la camara baja desde la vista de portada hasta el jugador
     closeMenu();
     hud.toast(`Saca ${names[0]}`);
   },
@@ -370,7 +371,14 @@ function frame(now) {
   }
 
   const pose = mode === 'walk' ? walker.pose : aimView.pose;
-  if (blend.t < 1) {
+  if (menus.cover) {
+    // Portada: la camara se mece despacio al sureste de la mesa y la deja a la derecha del encuadre.
+    const a = 0.72 + 0.4 * Math.sin(now * 0.00011);
+    const fx = -Math.sin(a), fz = -Math.cos(a); // hacia la mesa
+    const shift = camera.aspect > 1.2 ? 1.05 : 0;
+    camera.position.set(-fx * 3.3, 1.85, -fz * 3.3);
+    camera.lookAt(fz * shift, 0.72, -fx * shift);
+  } else if (blend.t < 1) {
     blend.t = Math.min(1, blend.t + dt / BLEND_TIME);
     const e = blend.t * blend.t * (3 - 2 * blend.t);
     camera.position.lerpVectors(blend.pos, pose.position, e);
