@@ -2,21 +2,21 @@
 
 import * as THREE from 'three';
 import { DT, BED_Y, R } from './physics/constants.js';
-import { buildTable, TABLE_OUT_X, TABLE_OUT_Z } from './render/tableMesh.js?v=7';
-import { buildBalls } from './render/ballsMesh.js?v=7';
+import { buildTable, TABLE_OUT_X, TABLE_OUT_Z } from './render/tableMesh.js?v=8';
+import { buildBalls } from './render/ballsMesh.js?v=8';
 import { createGame } from './game/match.js';
 import { remaining } from './rules/eightball.js';
-import { createWalker } from './player/walk.js?v=7';
-import { createAimView } from './player/aimView.js?v=7';
-import { createDesktopInput } from './player/input.js?v=7';
-import { createHud } from './ui/hud.js?v=7';
-import { buildRoom } from './render/room.js?v=7';
-import { setupLighting } from './render/lighting.js?v=7';
-import { createTouchControls } from './player/touch.js?v=7';
-import { createOnline } from './net/online.js?v=7';
-import { createMenus } from './ui/menus.js?v=7';
-import { loadSettings, saveSettings } from './ui/settings.js?v=7';
-import { createSound } from './audio/sound.js?v=7';
+import { createWalker } from './player/walk.js?v=8';
+import { createAimView } from './player/aimView.js?v=8';
+import { createDesktopInput } from './player/input.js?v=8';
+import { createHud } from './ui/hud.js?v=8';
+import { buildRoom } from './render/room.js?v=8';
+import { setupLighting } from './render/lighting.js?v=8';
+import { createTouchControls } from './player/touch.js?v=8';
+import { createOnline } from './net/online.js?v=8';
+import { createMenus } from './ui/menus.js?v=8';
+import { loadSettings, saveSettings } from './ui/settings.js?v=8';
+import { createSound } from './audio/sound.js?v=8';
 
 const canvas = document.getElementById('view');
 const uiRoot = document.getElementById('ui');
@@ -197,10 +197,23 @@ function openLink() {
     onConnected(role) {
       if (net.link !== link) return;
       net.me = role === 'host' ? 0 : 1;
-      if (role === 'guest') say({ t: 'hello', name: net.name });
+      if (role === 'guest') {
+        say({ t: 'hello', name: net.name });
+        menus.status('Sala encontrada. Empezando…');
+      }
     },
     onMessage(msg) {
-      if (net.link === link) net.inbox.push(msg);
+      if (net.link !== link) return;
+      // El saludo y el arranque se atienden al momento, aunque la pestana este en segundo plano
+      // (por ejemplo, mientras quien creo la sala manda el codigo por otra aplicacion).
+      if (msg.t === 'hello' || msg.t === 'start') {
+        net.applying = true;
+        try {
+          applyRemote(msg);
+        } finally {
+          net.applying = false;
+        }
+      } else net.inbox.push(msg);
     },
     onClosed(reason) {
       if (net.link !== link) return;
@@ -580,6 +593,9 @@ addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   checkOrientation();
 });
+
+// Al cerrar la pagina se avisa al rival, para que no se quede esperando.
+addEventListener('pagehide', () => { if (net.link) net.link.close(); });
 
 // Al volver de segundo plano la simulacion sigue donde estaba, sin saltos.
 document.addEventListener('visibilitychange', () => {

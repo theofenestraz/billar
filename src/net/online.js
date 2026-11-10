@@ -10,7 +10,9 @@ const TOPIC = 'billar8/sala/';
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // sin I ni O, que se confunden con 1 y 0
 const JOIN_WAIT = 4000; // espera de respuesta de la sala en cada servidor
 const PING_EVERY = 5000;
-const SILENCE_LIMIT = 45000; // sin noticias del rival durante este tiempo: desconectado
+// Sin noticias del rival durante este tiempo: desconectado. Es largo a proposito, porque un movil
+// con el navegador en segundo plano deja de enviar senales aunque el jugador siga ahi.
+const SILENCE_LIMIT = 180000;
 
 function loadMqtt() {
   return new Promise((resolve, reject) => {
