@@ -3,8 +3,8 @@
 import * as THREE from 'three';
 import { R, BED_Y } from '../physics/constants.js';
 import { POCKETS } from '../physics/table.js';
-import { makeBallTexture } from './textures.js?v=20';
-import { TRAY_Y, TRAY_Z, POCKET_HOLE } from './tableMesh.js?v=20';
+import { makeBallTexture } from './textures.js?v=21';
+import { TRAY_Y, TRAY_Z, POCKET_HOLE } from './tableMesh.js?v=21';
 
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -16,9 +16,35 @@ const FLOOR_Y = BED_Y - 0.12 + R; // fondo visible de la tronera
 const WALL_E = 0.45; // rebote contra el fondo de la tronera
 const MAX_DROP_TIME = 1.1;
 
+// Sombra de contacto: mancha oscura y difusa justo debajo de cada bola. La sombra del foco sola no basta,
+// porque las luces de relleno aclaran el tapete y la bola parece flotar.
+function makeContactTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grad.addColorStop(0, 'rgba(0,0,0,0.95)');
+  grad.addColorStop(0.22, 'rgba(0,0,0,0.75)');
+  grad.addColorStop(0.5, 'rgba(0,0,0,0.28)');
+  grad.addColorStop(0.78, 'rgba(0,0,0,0.07)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
 export function buildBalls() {
   const group = new THREE.Group();
   const geo = new THREE.SphereGeometry(R, 40, 28);
+  const contactMat = new THREE.MeshBasicMaterial({
+    map: makeContactTexture(), transparent: true, opacity: 0.6, depthWrite: false,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+  });
+  const contactGeo = new THREE.PlaneGeometry(R * 3.2, R * 3.2);
+  contactGeo.rotateX(-Math.PI / 2);
+  const contacts = [];
   const meshes = [];
   const last = [];
   const axis = new THREE.Vector3();
@@ -33,6 +59,9 @@ export function buildBalls() {
       clearcoat: 1,
       clearcoatRoughness: 0.04,
       envMapIntensity: 1.1,
+      // La sombra se calcula con la cara de arriba. Con la de abajo (lo que hace three.js por defecto)
+      // el centro de la sombra quedaba iluminado y se veia un aro alrededor de la bola.
+      shadowSide: THREE.FrontSide,
     });
     const m = new THREE.Mesh(geo, mat);
     m.castShadow = true;
@@ -42,6 +71,10 @@ export function buildBalls() {
     meshes.push(m);
     last.push(null);
     group.add(m);
+    const cs = new THREE.Mesh(contactGeo, contactMat);
+    cs.renderOrder = 1;
+    contacts.push(cs);
+    group.add(cs);
   }
 
   const drops = new Map(); // id -> caida en curso
@@ -136,6 +169,9 @@ export function buildBalls() {
   function sync(state, dt = 1 / 60) {
     for (const b of state.balls) {
       const m = meshes[b.id];
+      const cs = contacts[b.id];
+      cs.visible = !b.pocketed;
+      if (!b.pocketed) cs.position.set(b.x, BED_Y + 0.0004, b.z);
       if (b.pocketed && drops.has(b.id)) {
         last[b.id] = null;
         m.visible = true;

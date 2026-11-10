@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { HALF_W, HALF_L, BED_Y, R } from '../physics/constants.js';
 import { POCKETS, CUSHIONS } from '../physics/table.js';
-import { makeNoiseTexture, makeBumpTexture, makeFeltTextures, makePocketLinerTexture } from './textures.js?v=20';
+import { makeNoiseTexture, makeBumpTexture, makeFeltTextures, makePocketLinerTexture } from './textures.js?v=21';
 
 const OUT_X = 0.685; // media anchura exterior (1,37 / 2)
 const OUT_Z = 1.18; // media longitud exterior (2,36 / 2)
@@ -144,13 +144,44 @@ function miterAt(x, z, self, n) {
   return { x: n.nx, z: n.nz };
 }
 
-// Banda: el perfil (nariz inclinada hacia el tapete) recorre el segmento, con los extremos a inglete.
+// Banda: el perfil recorre el segmento, con los extremos a inglete. La nariz que toca la bola esta
+// redondeada hacia arriba y el canto se sombrea suave; por debajo, la goma se mete hacia dentro.
 function buildCushion(c, mat, depth) {
   const n = bodyNormal(c);
   // Un pelo por debajo del marco: si las dos caras de arriba coinciden, parpadean.
   const h = TOP_Y - BED_Y - 0.0008;
-  // Perfil en (distancia hacia el cuerpo, altura sobre el tapete). Convexo.
-  const prof = [[0, h * 0.72], [0, h], [depth, h], [depth, 0], [depth * 0.4, 0]];
+  const nose = h * 0.72;
+  const rn = 0.009; // radio del canto redondeado entre la nariz y la cara de arriba
+  // Perfil en (distancia hacia el cuerpo, altura sobre el tapete), convexo, con marca de suavizado.
+  const prof = [[depth * 0.4, 0, false], [0, nose, false]];
+  for (let i = 0; i <= 6; i++) {
+    const a = Math.PI - (i / 6) * (Math.PI / 2);
+    prof.push([rn + rn * Math.cos(a), h - rn + rn * Math.sin(a), true]);
+  }
+  prof.push([depth, h, false], [depth, 0, false]);
+  const k = prof.length;
+  // Normal de cada lado del perfil, hacia fuera, en (o, y).
+  const pc = prof.reduce((acc, p) => [acc[0] + p[0] / k, acc[1] + p[1] / k], [0, 0]);
+  const edgeN = prof.map((p, i) => {
+    const q = prof[(i + 1) % k];
+    let no = q[1] - p[1];
+    let ny = -(q[0] - p[0]);
+    const l = Math.hypot(no, ny) || 1;
+    no /= l;
+    ny /= l;
+    if (no * ((p[0] + q[0]) / 2 - pc[0]) + ny * ((p[1] + q[1]) / 2 - pc[1]) < 0) {
+      no = -no;
+      ny = -ny;
+    }
+    return [no, ny];
+  });
+  // Normal suave en los puntos del canto: media de los dos lados que se juntan.
+  const smoothN = prof.map((p, i) => {
+    const e0 = edgeN[(i - 1 + k) % k];
+    const e1 = edgeN[i];
+    const l = Math.hypot(e0[0] + e1[0], e0[1] + e1[1]) || 1;
+    return [(e0[0] + e1[0]) / l, (e0[1] + e1[1]) / l];
+  });
   const ends = [
     { x: c.x1, z: c.z1, m: miterAt(c.x1, c.z1, c, n) },
     { x: c.x2, z: c.z2, m: miterAt(c.x2, c.z2, c, n) },
@@ -163,37 +194,55 @@ function buildCushion(c, mat, depth) {
     // Coordenadas de textura en metros, como el tapete.
     return { p: [x, BED_Y + y, z], uv: [x * tx + z * tz, o + y] };
   }));
-  // Centro del cuerpo, para orientar cada cara hacia fuera.
+  // Centro del cuerpo, para orientar las tapas hacia fuera.
   const cx = (c.x1 + c.x2) / 2 + n.nx * depth * 0.5;
   const cy = BED_Y + h * 0.5;
   const cz = (c.z1 + c.z2) / 2 + n.nz * depth * 0.5;
   const pos = [];
   const uvs = [];
-  const tri = (a, b, d) => {
+  const nor = [];
+  // Normal 3D a partir de la del perfil: o crece hacia el cuerpo, en la direccion n.
+  const to3 = ([no, ny]) => [n.nx * no, ny, n.nz * no];
+  const push = (v, nn) => {
+    pos.push(...v.p);
+    uvs.push(...v.uv);
+    nor.push(...nn);
+  };
+  const faceN = (a, b, d) => {
     const ux = b.p[0] - a.p[0], uy = b.p[1] - a.p[1], uz = b.p[2] - a.p[2];
     const vx = d.p[0] - a.p[0], vy = d.p[1] - a.p[1], vz = d.p[2] - a.p[2];
-    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
-    const mx = (a.p[0] + b.p[0] + d.p[0]) / 3 - cx;
-    const my = (a.p[1] + b.p[1] + d.p[1]) / 3 - cy;
-    const mz = (a.p[2] + b.p[2] + d.p[2]) / 3 - cz;
-    const list = nx * mx + ny * my + nz * mz >= 0 ? [a, b, d] : [a, d, b];
-    for (const v of list) {
-      pos.push(...v.p);
-      uvs.push(...v.uv);
-    }
+    return [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx];
   };
-  const k = prof.length;
+  // Lados: cada tramo del perfil a lo largo de la banda.
   for (let i = 0; i < k; i++) {
-    const a0 = ring[0][i], a1 = ring[0][(i + 1) % k];
-    const b0 = ring[1][i], b1 = ring[1][(i + 1) % k];
-    tri(a0, a1, b1);
-    tri(a0, b1, b0);
+    const j = (i + 1) % k;
+    const a0 = ring[0][i], a1 = ring[0][j], b0 = ring[1][i], b1 = ring[1][j];
+    const ni = to3(prof[i][2] ? smoothN[i] : edgeN[i]);
+    const nj = to3(prof[j][2] ? smoothN[j] : edgeN[i]);
+    // Orden de los vertices segun hacia donde mira la cara.
+    const fn = faceN(a0, a1, b1);
+    const en = to3(edgeN[i]);
+    const flip = fn[0] * en[0] + fn[1] * en[1] + fn[2] * en[2] < 0;
+    const quad = flip ? [[a0, ni], [b1, nj], [a1, nj], [a0, ni], [b0, ni], [b1, nj]]
+      : [[a0, ni], [a1, nj], [b1, nj], [a0, ni], [b1, nj], [b0, ni]];
+    for (const [v, nn] of quad) push(v, nn);
   }
-  for (const r of ring) for (let i = 1; i < k - 1; i++) tri(r[0], r[i], r[i + 1]);
+  // Tapas de los extremos, planas.
+  for (const r of ring) {
+    for (let i = 1; i < k - 1; i++) {
+      let tri = [r[0], r[i], r[i + 1]];
+      const fn = faceN(...tri);
+      const m = tri.reduce((acc, v) => [acc[0] + v.p[0] / 3 - cx / 3, acc[1] + v.p[1] / 3 - cy / 3, acc[2] + v.p[2] / 3 - cz / 3], [0, 0, 0]);
+      if (fn[0] * m[0] + fn[1] * m[1] + fn[2] * m[2] < 0) tri = [r[0], r[i + 1], r[i]];
+      const f = faceN(...tri);
+      const l = Math.hypot(...f) || 1;
+      for (const v of tri) push(v, [f[0] / l, f[1] / l, f[2] / l]);
+    }
+  }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-  geo.computeVertexNormals();
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
   const mesh = new THREE.Mesh(geo, mat);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
@@ -251,8 +300,8 @@ export function buildTable() {
   // Interior de las troneras: copa de goma negra con costuras, que se oscurece hacia abajo, y el fondo
   // con la boca por donde se van las bolas. Empieza justo en el borde del agujero del tapete (radio
   // POCKET_HOLE), sin asomar por encima: por el lado exterior la pared la pone el propio marco.
-  const liner = new THREE.MeshStandardMaterial({ map: makePocketLinerTexture(), roughness: 0.82, side: THREE.DoubleSide, envMapIntensity: 0.2 });
-  const cup = new THREE.MeshStandardMaterial({ color: '#1a1a1c', roughness: 0.9 });
+  const liner = new THREE.MeshStandardMaterial({ map: makePocketLinerTexture(), roughness: 0.95, side: THREE.DoubleSide, envMapIntensity: 0.05 });
+  const cup = new THREE.MeshStandardMaterial({ color: '#0c0c0d', roughness: 0.95 });
   for (const p of POCKETS) {
     const tube = new THREE.Mesh(new THREE.CylinderGeometry(POCKET_HOLE, POCKET_HOLE - 0.004, 0.14, 32, 1, true), liner);
     tube.position.set(p.x, BED_Y - 0.0715, p.z); // de BED_Y - 0,1415 a BED_Y - 0,0015, bajo el tapete

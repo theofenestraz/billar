@@ -556,7 +556,7 @@ export function makeFeltTextures() {
   return { map: toTexture(c, 2, 2), bump: toTexture(b, 2, 2, false) };
 }
 
-// Forro de goma de las troneras: gris muy oscuro con costuras verticales, mas negro hacia el fondo.
+// Forro de goma de las troneras: casi negro, con costuras discretas, mas oscuro hacia el fondo.
 export function makePocketLinerTexture() {
   const w = 256;
   const h = 128;
@@ -564,33 +564,137 @@ export function makePocketLinerTexture() {
   const g = c.getContext('2d');
   const r = rng(515);
   const grad = g.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0, '#3a3a3e');
-  grad.addColorStop(0.35, '#202023');
-  grad.addColorStop(1, '#050506');
+  grad.addColorStop(0, '#1d1d20');
+  grad.addColorStop(0.3, '#0f0f11');
+  grad.addColorStop(1, '#030303');
   g.fillStyle = grad;
   g.fillRect(0, 0, w, h);
   // Grano de la goma.
   const img = g.getImageData(0, 0, w, h);
   for (let i = 0; i < w * h; i++) {
-    const n = (r() - 0.5) * 14;
+    const n = (r() - 0.5) * 8;
     img.data[i * 4] += n;
     img.data[i * 4 + 1] += n;
     img.data[i * 4 + 2] += n;
   }
   g.putImageData(img, 0, 0);
-  // Costuras.
+  // Costuras apenas marcadas: con brillo, la copa parecia una lata.
   for (let k = 0; k < 6; k++) {
     const x = (k + 0.5) * (w / 6);
-    g.fillStyle = 'rgba(0,0,0,0.55)';
+    g.fillStyle = 'rgba(0,0,0,0.4)';
     g.fillRect(x - 1, 0, 2, h);
-    g.fillStyle = 'rgba(255,255,255,0.08)';
-    for (let y = 2; y < h; y += 7) g.fillRect(x + 2, y, 2, 3);
   }
-  // Brillo del borde superior.
-  g.fillStyle = 'rgba(255,255,255,0.10)';
-  g.fillRect(0, 0, w, 3);
   const t = toTexture(c);
   t.wrapS = THREE.RepeatWrapping;
   t.wrapT = THREE.ClampToEdgeWrapping;
   return t;
+}
+
+// Taco de dos piezas, de la punta (arriba de la textura) al tope (abajo). La textura va a lo largo:
+// la coordenada v recorre la longitud y la u da la vuelta. Devuelve color y aspereza.
+// Tramos en metros desde la punta: suela, virola, fuste de arce, union, culata con puntas,
+// empunadura de hilo, manguito y tope de goma.
+export const CUE_PARTS = {
+  len: 1.45, tip: 0.011, ferrule: 0.036, joint: 0.735, collar: 0.762,
+  forearm: 1.05, wrap: 1.3, bumper: 1.432,
+};
+export function makeCueTextures() {
+  const P = CUE_PARTS;
+  const w = 128;
+  const h = 2048;
+  const c = canvas(w, h);
+  const g = c.getContext('2d');
+  const rc = canvas(w, h);
+  const gr = rc.getContext('2d');
+  const r = rng(808);
+  const Y = (m) => Math.round((m / P.len) * h);
+  const band = (a, b, color, rough) => {
+    g.fillStyle = color;
+    g.fillRect(0, Y(a), w, Y(b) - Y(a));
+    gr.fillStyle = rough;
+    gr.fillRect(0, Y(a), w, Y(b) - Y(a));
+  };
+  // Vetas a lo largo, finas y algo onduladas.
+  const grain = (a, b, color, n, alpha) => {
+    for (let i = 0; i < n; i++) {
+      const x0 = r() * w;
+      const amp = 0.6 + r() * 2;
+      const ph = r() * 6.28;
+      g.strokeStyle = color.replace('A', (alpha * (0.4 + r() * 0.6)).toFixed(3));
+      g.lineWidth = 0.6 + r() * 1.4;
+      g.beginPath();
+      for (let y = Y(a); y <= Y(b); y += 8) {
+        const x = x0 + Math.sin(y * 0.004 + ph) * amp;
+        if (y === Y(a)) g.moveTo(x, y);
+        else g.lineTo(x, y);
+      }
+      g.stroke();
+      // Repetida a un lado para que la costura de la vuelta no se note.
+      g.save();
+      g.translate(x0 > w / 2 ? -w : w, 0);
+      g.stroke();
+      g.restore();
+    }
+  };
+
+  band(0, P.tip, '#2f63a8', '#f0f0f0'); // suela de cuero con tiza azul
+  band(P.tip, P.ferrule, '#f3efe4', '#5a5a5a'); // virola blanca
+  // Fuste de arce, algo mas oscuro hacia la union por el uso.
+  const sg = g.createLinearGradient(0, Y(P.ferrule), 0, Y(P.joint));
+  sg.addColorStop(0, '#ecd7ae');
+  sg.addColorStop(1, '#d9bd88');
+  g.fillStyle = sg;
+  g.fillRect(0, Y(P.ferrule), w, Y(P.joint) - Y(P.ferrule));
+  gr.fillStyle = '#6e6e6e';
+  gr.fillRect(0, Y(P.ferrule), w, Y(P.joint) - Y(P.ferrule));
+  grain(P.ferrule, P.joint, 'rgba(150,105,55,A)', 45, 0.16);
+  // Union: anillo metalico entre dos aros negros.
+  band(P.joint, P.collar, '#111113', '#606060');
+  band(P.joint + 0.008, P.collar - 0.008, '#c9ccd0', '#3a3a3a');
+  // Culata: ebano con cuatro puntas de arce que apuntan hacia la punta del taco.
+  band(P.collar, P.forearm, '#1b120d', '#4a4a4a');
+  grain(P.collar, P.forearm, 'rgba(90,60,40,A)', 40, 0.5);
+  for (let k = 0; k < 4; k++) {
+    const x = (k + 0.5) * (w / 4);
+    const half = w / 8 - 2;
+    for (const dx of [0, -w, w]) {
+      g.fillStyle = '#e4cf9f';
+      g.beginPath();
+      g.moveTo(x + dx - half, Y(P.forearm));
+      g.lineTo(x + dx, Y(P.collar + 0.06));
+      g.lineTo(x + dx + half, Y(P.forearm));
+      g.closePath();
+      g.fill();
+      g.fillStyle = '#7a1c1c'; // filete rojo en el centro de cada punta
+      g.beginPath();
+      g.moveTo(x + dx - half * 0.35, Y(P.forearm));
+      g.lineTo(x + dx, Y(P.collar + 0.12));
+      g.lineTo(x + dx + half * 0.35, Y(P.forearm));
+      g.closePath();
+      g.fill();
+    }
+  }
+  band(P.forearm, P.forearm + 0.006, '#c9ccd0', '#3a3a3a');
+  // Empunadura de hilo negro: trama cruzada fina, mate.
+  band(P.forearm + 0.006, P.wrap, '#16161a', '#e8e8e8');
+  for (let y = Y(P.forearm + 0.006); y < Y(P.wrap); y += 3) {
+    g.fillStyle = r() < 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.35)';
+    g.fillRect(0, y, w, 1);
+  }
+  for (let x = 0; x < w; x += 4) {
+    g.fillStyle = 'rgba(255,255,255,0.035)';
+    g.fillRect(x, Y(P.forearm + 0.006), 1, Y(P.wrap) - Y(P.forearm + 0.006));
+  }
+  band(P.wrap, P.wrap + 0.006, '#c9ccd0', '#3a3a3a');
+  // Manguito de ebano y tope de goma.
+  band(P.wrap + 0.006, P.bumper, '#1b120d', '#4a4a4a');
+  grain(P.wrap + 0.006, P.bumper, 'rgba(90,60,40,A)', 25, 0.5);
+  band(P.bumper - 0.02, P.bumper - 0.016, '#c9ccd0', '#3a3a3a');
+  band(P.bumper, P.len, '#0b0b0c', '#f0f0f0');
+
+  const map = new THREE.CanvasTexture(c);
+  map.colorSpace = THREE.SRGBColorSpace;
+  map.anisotropy = 8;
+  const rough = new THREE.CanvasTexture(rc);
+  return { map, rough };
 }

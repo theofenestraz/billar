@@ -6,6 +6,7 @@ import { R, BED_Y, HALF_W, HALF_L } from '../physics/constants.js';
 const RAIL_TOP = 0.04 - R; // altura del borde de la banda sobre el centro de la bola
 const TIP_R = 0.009; // grosor del taco cerca de la punta
 import { predictAim } from '../physics/aim.js';
+import { makeCueTextures, CUE_PARTS } from '../render/textures.js?v=21';
 
 const ARM = 0.62; // distancia de la camara a la blanca
 const PITCH_MIN = 0.14;
@@ -18,6 +19,47 @@ const BASE_TILT = 0.09; // inclinacion normal del taco, para salvar la banda
 const MAX_TILT = 1.25; // con una bola pegada detras el taco casi se pone vertical
 const DRAW_LIMIT = 0.3; // por encima de esta inclinacion (unos 17 grados) ya no se puede picar por abajo
 const CUE_CLEAR = R + 0.014; // radio de la bola mas el grosor del taco a esa distancia, con margen
+
+// Perfil del taco: radio segun la distancia a la punta. La punta queda en z = 0 y el tope en z = len.
+function buildCueGeometry() {
+  const P = CUE_PARTS;
+  const pts = [];
+  const add = (z, r) => pts.push(new THREE.Vector2(r, z));
+  // Suela abombada.
+  for (let i = 0; i <= 5; i++) {
+    const a = (i / 5) * (Math.PI / 2);
+    add(0.003 * (1 - Math.cos(a)), 0.0062 * Math.sin(a));
+  }
+  add(P.tip, 0.0062);
+  add(P.tip, 0.0063);
+  add(P.ferrule, 0.0063);
+  // Fuste: casi recto los primeros palmos y luego se ensancha hacia la union.
+  for (let i = 0; i <= 24; i++) {
+    const t = i / 24;
+    add(P.ferrule + t * (P.joint - P.ferrule), 0.0064 + 0.0034 * Math.pow(t, 1.6));
+  }
+  add(P.joint, 0.0108);
+  add(P.collar, 0.0108);
+  for (let i = 1; i <= 8; i++) {
+    const t = i / 8;
+    add(P.collar + t * (P.forearm - P.collar), 0.0108 + 0.002 * t);
+  }
+  add(P.wrap, 0.0136);
+  add(P.bumper, 0.0147);
+  // Tope de goma redondeado.
+  for (let i = 0; i <= 5; i++) {
+    const a = (i / 5) * (Math.PI / 2);
+    add(P.bumper + (P.len - P.bumper) * Math.sin(a), 0.0144 * Math.cos(a) + 0.0003 * (1 - i / 5));
+  }
+  add(P.len, 0);
+  const geo = new THREE.LatheGeometry(pts, 32);
+  // La textura se reparte por longitud, no por numero de puntos.
+  const pos = geo.attributes.position;
+  const uv = geo.attributes.uv;
+  for (let i = 0; i < pos.count; i++) uv.setY(i, Math.min(1, Math.max(0, pos.getY(i) / P.len)));
+  geo.rotateX(Math.PI / 2); // eje del torno (y) al eje del taco (z)
+  return geo;
+}
 
 function ribbon(mat) {
   const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
@@ -55,25 +97,20 @@ export function createAimView(scene, game) {
   group.visible = false;
   scene.add(group);
 
-  // Taco: fuste claro y mango oscuro.
+  // Taco de dos piezas, una sola malla de revolucion con su textura a lo largo (ver makeCueTextures).
   const cue = new THREE.Group();
-  const shaft = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.0095, 0.0062, CUE_LEN * 0.55, 16),
-    new THREE.MeshStandardMaterial({ color: '#e2c48d', roughness: 0.45 }),
+  const cueTex = makeCueTextures();
+  cueTex.map.flipY = false;
+  cueTex.rough.flipY = false;
+  const cueMesh = new THREE.Mesh(
+    buildCueGeometry(),
+    new THREE.MeshPhysicalMaterial({
+      map: cueTex.map, roughnessMap: cueTex.rough, roughness: 1,
+      clearcoat: 0.35, clearcoatRoughness: 0.3, envMapIntensity: 0.6,
+    }),
   );
-  shaft.rotation.x = Math.PI / 2;
-  shaft.position.z = (CUE_LEN * 0.55) / 2;
-  const butt = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.0145, 0.0095, CUE_LEN * 0.45, 16),
-    new THREE.MeshStandardMaterial({ color: '#141416', roughness: 0.35 }),
-  );
-  butt.rotation.x = Math.PI / 2;
-  butt.position.z = CUE_LEN * 0.55 + (CUE_LEN * 0.45) / 2;
-  const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.0062, 0.0062, 0.012, 12), new THREE.MeshStandardMaterial({ color: '#3a6fb0', roughness: 0.9 }));
-  tip.rotation.x = Math.PI / 2;
-  tip.position.z = -0.006;
-  cue.add(shaft, butt, tip);
-  cue.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  cueMesh.castShadow = true;
+  cue.add(cueMesh);
   group.add(cue);
 
   // Linea guia sobre el tapete.
