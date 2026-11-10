@@ -5,8 +5,8 @@ import * as THREE from 'three';
 import {
   makeNoiseTexture, makeBumpTexture, makeDartboardTexture, makePosterTexture, makeSignTexture,
   makeNeonRackTexture, makeWashTexture, makeCirclesPanelTexture, makePlasticTexture, makeSafetySignTexture,
-} from './textures.js?v=4';
-import { buildFoosball, buildShellChair, buildVendingMachine, buildHighTable, buildCafeSet } from './props.js?v=4';
+} from './textures.js?v=5';
+import { buildFoosball, buildShellChair, buildVendingMachine, buildHighTable, buildCafeSet } from './props.js?v=5';
 
 export const ROOM = {
   minX: -4.6, maxX: 7.3, minZ: -8.0, maxZ: 5.7, height: 3.0,
@@ -148,15 +148,16 @@ export function buildRoom() {
   group.add(pane2);
   for (const x of [-6.05, -7.5, -8.95]) block(x - 0.006, x + 0.006, COR.sill, COR.top, COR.n - 0.015, COR.n - 0.005, metalDark, { cast: false });
   // Marco blanco del ventanal y cristales.
-  block(W - 0.04, W + 0.04, WIN.y0 - 0.05, WIN.y0, WIN.z0, WIN.z1, white, { cast: false });
-  block(W - 0.04, W + 0.04, WIN.y1, WIN.y1 + 0.05, WIN.z0, WIN.z1, white, { cast: false });
+  // El marco cubre todo el canto del muro y sobresale un poco, para que ninguna cara coincida con otra.
+  block(W - 0.215, W + 0.04, WIN.y0 - 0.05, WIN.y0 + 0.012, WIN.z0 - 0.01, WIN.z1 + 0.01, white, { cast: false });
+  block(W - 0.215, W + 0.04, WIN.y1 - 0.012, WIN.y1 + 0.05, WIN.z0 - 0.01, WIN.z1 + 0.01, white, { cast: false });
   const pane = new THREE.Mesh(new THREE.PlaneGeometry(WIN.z1 - WIN.z0, WIN.y1 - WIN.y0), glass);
-  pane.position.set(W - 0.01, (WIN.y0 + WIN.y1) / 2, (WIN.z0 + WIN.z1) / 2);
+  pane.position.set(W - 0.03, (WIN.y0 + WIN.y1) / 2, (WIN.z0 + WIN.z1) / 2);
   pane.rotation.y = Math.PI / 2;
   group.add(pane);
   for (let i = 1; i < 4; i++) {
     const z = WIN.z0 + ((WIN.z1 - WIN.z0) * i) / 4;
-    block(W - 0.015, W - 0.005, WIN.y0, WIN.y1, z - 0.006, z + 0.006, metalDark, { cast: false });
+    block(W - 0.045, W - 0.015, WIN.y0 + 0.012, WIN.y1 - 0.012, z - 0.008, z + 0.008, metalDark, { cast: false });
   }
   // Sala blanca tras el ventanal, con los tubos de neon de colores.
   const whiteRoom = emissive('#ece6e2');
@@ -461,8 +462,9 @@ export function buildRoom() {
   leaningPillar(5.9, -7.2, -1.5, 0.75, 0.6);
   block(2.7, 6.2, 0, 0.45, N, -7.5, tierMat, { collide: true });
   // A del sureste, sobre el futbolin.
-  leaningPillar(3.5, 1.6, 1.6, 1.15, 0.6);
-  leaningPillar(7.2, 2.4, -1.75, 0.9, 0.6);
+  // Los dos pies a la misma profundidad y las cabezas juntas, para que formen la A.
+  leaningPillar(3.6, 2.4, 1.85, 1.0, 0.6);
+  leaningPillar(7.2, 2.4, -1.75, 1.0, 0.6);
   // Pilar recto junto a la entrada, con el taco apoyado y la papelera.
   const P = { x: -3.05, z: 1.5, h: 0.4 };
   block(P.x - P.h, P.x + P.h, 0, H, P.z - P.h, P.z + P.h, concrete, { collide: true });
