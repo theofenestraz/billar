@@ -235,7 +235,7 @@ test('findFreeSpot: returns the nearest free point when the spot is taken', () =
 import { createRack as rackForBreak, strike as strikeForBreak, step as stepForBreak, isAtRest as restForBreak } from '../src/physics/simulate.js';
 import { cueSpeed } from '../src/physics/constants.js';
 
-test('break: at full power the whole rack opens, not just the corner balls', () => {
+test('break: at full power (3.94 m/s) about half the rack leaves its place', () => {
   for (const x of [0, 0.006, -0.011]) {
     const s = rackForBreak();
     s.balls[0].x = x;
@@ -252,12 +252,12 @@ test('break: at full power the whole rack opens, not just the corner balls', () 
       const b = s.balls[i];
       if (b.pocketed || Math.hypot(b.x - start[i].x, b.z - start[i].z) > 0.25) moved++;
     }
-    assert(moved >= 11, `only ${moved} of 15 balls left the rack (cue x ${x})`);
+    assert(moved >= 6, `only ${moved} of 15 balls left the rack (cue x ${x})`);
   }
 });
 
-test('power bar: full power is 75% of the old 10.5 m/s, the whole bar scales the same', () => {
-  assert(Math.abs(cueSpeed(1) - 0.75 * 10.5) < 1e-9);
-  assert(Math.abs(cueSpeed(0.5) - 0.75 * (0.3 + 0.25 * 8.7)) < 0.01);
+test('power bar: full power is 37.5% of the original 10.5 m/s, the whole bar scales the same', () => {
+  assert(Math.abs(cueSpeed(1) - 0.375 * 10.5) < 1e-9);
+  assert(Math.abs(cueSpeed(0.5) - 0.375 * (0.3 + 0.25 * 8.7)) < 0.01);
   for (let p = 0; p < 1; p += 0.05) assert(cueSpeed(p + 0.05) > cueSpeed(p), 'not increasing');
 });

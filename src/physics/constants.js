@@ -17,11 +17,12 @@ export const V_REST = 0.005; // por debajo de esta velocidad la bola se detiene
 export const MIN_CUE_SPEED = 0.3;
 export const MAX_CUE_SPEED = 9;
 export const TOP_BOOST = 1.5; // extra solo en lo mas alto de la barra, para el saque
-// Toda la barra de fuerza da el 75 % de lo que daba antes (pedido por el usuario el 2026-11-10).
-export const POWER_SCALE = 0.75;
+// Toda la barra de fuerza da el 37,5 % de la escala original: 75 % el 2026-11-10 y la mitad de eso
+// el 2026-11-11, ambos pedidos por el usuario.
+export const POWER_SCALE = 0.375;
 
 // Velocidad de la blanca segun la fuerza elegida (0 a 1). El termino p^8 solo pesa cerca del
-// maximo, que llega a 0,75 x 10,5 = 7,875 m/s.
+// maximo, que llega a 0,375 x 10,5 = 3,94 m/s.
 export function cueSpeed(p) {
   const q = p < 0 ? 0 : p > 1 ? 1 : p;
   const q2 = q * q;
